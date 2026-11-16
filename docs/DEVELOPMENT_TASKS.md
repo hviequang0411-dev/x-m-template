@@ -191,3 +191,15 @@ Not done (documented limitations):
 - **R30 abort by agreement of all players** is not implemented; only the 5-minute stall abort exists.
 
 Tests: 301 unit tests, 150 pgTAP assertions, 23 integration tests.
+
+### 2026-11-16 · Day 7 🟡 (local work done; production deploy and beta need your accounts)
+| Task | Status | Notes |
+|------|--------|-------|
+| T7.1 Playwright E2E | ✅ | `e2e/full-match.spec.ts`: 4 isolated browser contexts register through the UI, host creates a room, 3 join by code (typed in lower case), the host's seat list fills in live, start, each sees only their 10 cards (40 distinct), leader can't pass, play to the end, all 4 see the same persisted result (+45 / cóng −15), History and Profile match, back to the room with 4 seats. Green 4 runs in a row (27–60 s). Chromium lives in `node_modules` (D:), not on the system drive |
+| T7.2 Build + deploy config | 🟡 | Ready: production build (pages after login are lazy-loaded; the 500 kB warning is gone), `vercel.json` (SPA rewrite, security headers, immutable asset caching), [DEPLOYMENT.md](DEPLOYMENT.md), and `scripts/smoke.mjs` (17 checks with public values only), which passes against the local stack + production build. **Not done:** `supabase db push`, functions deploy and the Vercel project need your Supabase/Vercel accounts |
+| T7.3 Docs | ✅ | README (scripts, known limitations, status), [API_SPEC.md](API_SPEC.md) (every function, body, result, errors, public state, Realtime topics), DATABASE.md up to date |
+| T7.4 Beta checklist | 🟡 | [BETA_CHECKLIST.md](BETA_CHECKLIST.md) written; running it needs production and 4 real people |
+
+Also: `tsconfig.tests.json` puts `e2e/`, `tests/` and the test configs under `tsc -b`, so `verify` typechecks them.
+
+Final local state: 301 unit tests, 150 pgTAP assertions, 23 integration tests, 1 E2E test (full match), 17-check smoke test. All green.

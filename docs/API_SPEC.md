@@ -1,0 +1,70 @@
+# API spec
+
+All game writes go through these Edge Functions. Reads go through PostgREST with RLS (see [DATABASE.md](DATABASE.md)).
+
+## Conventions
+- `POST https://<project>.supabase.co/functions/v1/<name>` with headers `Authorization: Bearer <user JWT>`,
+  `apikey: <anon key>`, `Content-Type: application/json`.
+- Bodies are validated with Zod (`supabase/functions/_shared/schemas.ts`); unknown keys are rejected.
+- Success: `{ "ok": true, ...result }` (HTTP 200).
+- Error: `{ "ok": false, "error": { "code": "...", "message": "<Vietnamese>" } }` with the status below.
+  Codes, statuses and messages live in one table: `supabase/functions/_shared/errors.ts`.
+- **Idempotency:** game actions carry a client-generated `actionId` (UUID). Sending the same `actionId` again returns the
+  current state with `"duplicate": true` and commits nothing. Clients retry a dropped request once with the same body.
+- **Concurrency:** `expectedVersion` must equal the match's current `version`, or the call fails with `VERSION_CONFLICT`
+  (refetch and try again). The check is repeated under a row lock in the database.
+
+## Rooms
+| Function | Body | Result | Errors |
+|---|---|---|---|
+| `create-room` | `{}` | `{ roomId, code, seat: 0 }` | `ALREADY_IN_ROOM` |
+| `join-room` | `{ code }` (6 chars, case-insensitive, no 0/O/1/I) | `{ roomId, code, seat }` (lowest free seat) | `ROOM_NOT_FOUND`, `ROOM_FULL`, `ALREADY_IN_ROOM`, `MATCH_IN_PROGRESS` |
+| `leave-room` | `{ roomId }` | `{ roomId, left: true }` | `NOT_ROOM_MEMBER`, `MATCH_IN_PROGRESS` (leaving mid-match is not supported yet) |
+
+Host leaves → the lowest occupied seat becomes host; the last one out closes the room (R33).
+
+## Matches
+| Function | Body | Result | Errors |
+|---|---|---|---|
+| `start-match` | `{ roomId }` | `{ matchId, version: 1, state }` | `NOT_ROOM_MEMBER`, `NOT_ROOM_HOST`, `NOT_ENOUGH_PLAYERS`, `MATCH_IN_PROGRESS` |
+| `play-cards` | `{ actionId, matchId, expectedVersion, cards: ["3S", …] }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `MATCH_NOT_ACTIVE` |
+| `pass-turn` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `LEADER_CANNOT_PASS`, `MATCH_NOT_ACTIVE` |
+| `claim-timeout` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `TURN_NOT_EXPIRED`, `VERSION_CONFLICT`, `MATCH_NOT_ACTIVE` |
+| `finish-match` | `{ matchId }` | `{ version, state }` (status `ABORTED`) | `NOT_ROOM_HOST`, `MATCH_NOT_STALLED`, `MATCH_NOT_ACTIVE` |
+
+- `start-match` shuffles with crypto RNG and deals 10 cards each. The first match is led by a random seat, later matches by the
+  previous winner's seat.
+- `claim-timeout`: any seated player, once `turnDeadline` (30 s per turn) has passed. The current seat auto-passes, or
+  auto-plays its lowest single when leading (R27).
+- `finish-match` aborts only (never declares a winner): host only, after 5 minutes without a move (R30).
+- When a play empties a hand the match ends in the same transaction: `match_results` and profile totals are written once.
+
+## Common errors
+| Code | HTTP | When |
+|---|---|---|
+| `INVALID_REQUEST` | 400 | Body fails validation |
+| `UNAUTHORIZED` | 401 | Missing or invalid user JWT |
+| `METHOD_NOT_ALLOWED` | 405 | Not POST |
+| `MATCH_NOT_FOUND` / `ROOM_NOT_FOUND` | 404 | Unknown id or code |
+| `ACTION_ALREADY_PROCESSED` | 409 | Internal; surfaced to clients as an idempotent success |
+| `INTERNAL_ERROR` | 500 | Anything unexpected (details only in function logs) |
+
+## Public state (`state` field and Realtime broadcast)
+```json
+{
+  "matchId": "uuid", "roomId": "uuid", "version": 7, "status": "PLAYING | FINISHED | ABORTED",
+  "currentSeat": 2, "leadSeat": 0, "turnDeadline": "ISO time",
+  "currentTrick": { "type": "STRAIGHT", "size": 3, "keyRank": 5, "cards": ["3S", "4H", "5D"] },
+  "passedSeats": [3], "winnerSeat": null,
+  "seats": [{ "seat": 0, "userId": "uuid", "cardCount": 8, "hasPlayed": true, "status": "PLAYING" }]
+}
+```
+Never contains a hand. Card codes: rank `3-9 T J Q K A 2` + suit `S C D H`.
+
+## Realtime
+Private channels, authorised by RLS on `realtime.messages`:
+- `room:<roomId>`: active room members. Events `players_changed`, `match_started { matchId }`, `match_finished { matchId }`.
+  Presence (key = user id) shows who is online.
+- `match:<matchId>`: seated players. Event `state` = the public state above, sent after each commit.
+
+Clients treat every event as "refetch"; their own hand is always re-read from `player_private_states` (own row only).

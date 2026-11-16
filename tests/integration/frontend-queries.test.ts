@@ -51,7 +51,7 @@ describe('frontend queries against the real database', () => {
     expect(queries.activeRoom.data).toMatchObject({ seat: 1, room: { id: roomId, status: 'WAITING' } })
     expect((queries.room.data as { players: unknown[] }).players).toHaveLength(4)
     expect(queries.match.data).toMatchObject({ id: matchId, status: 'FINISHED', room: { host_id: players[0]!.userId } })
-    expect((queries.match.data as { players: { profile: { display_name: string } }[] }).players[0]!.profile.display_name).toBeTruthy()
+    expect((queries.match.data as unknown as { players: { profile: { display_name: string } }[] }).players[0]!.profile.display_name).toBeTruthy()
     expect(queries.results.data).toHaveLength(4)
     expect(queries.history.data![0]).toMatchObject({ match_id: matchId, match: { room: { code: expect.stringMatching(/^[A-HJ-NP-Z2-9]{6}$/) } } })
     expect(queries.profile.data).toMatchObject({ id: me.userId, matches_played: 1 })
