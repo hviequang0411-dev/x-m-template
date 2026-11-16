@@ -169,7 +169,7 @@ row-locked check inside the RPC is what actually guarantees correctness (master 
 { "ok": false, "error": { "code": "NOT_YOUR_TURN", "message": "Chưa đến lượt bạn" } }
 ```
 
-Codes: master prompt §13, plus the additions in RULE_DECISIONS C6. HTTP status: 400 validation,
+Codes: master prompt §13, plus the additions in RULE_DECISIONS C6. Codes the engine returns for a move (`MOVE_ERROR_CODES` in `game-engine/state.ts`): `INVALID_REQUEST`, `MATCH_NOT_ACTIVE`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `LEADER_CANNOT_PASS`. HTTP status: 400 validation,
 401 unauthorized, 403 permission, 404 not found, 409 version/duplicate/state, 500 internal.
 
 ## 9. Environments and deployment

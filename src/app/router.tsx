@@ -14,6 +14,10 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
         path: '/dev/cards',
         lazy: async () => ({ Component: (await import('@/dev/CardsPreviewPage')).CardsPreviewPage }),
       },
+      {
+        path: '/dev/table',
+        lazy: async () => ({ Component: (await import('@/dev/HotSeatPage')).HotSeatPage }),
+      },
     ]
   : []
 

@@ -144,3 +144,15 @@ Tests: 127 unit tests (102 new). Browser-checked on `/dev/cards`: select/deselec
 Note: `canBeat` is intentionally **not** transitive across types (four 3s beat a 2 and a 2 beats an A, but four 3s don't beat an A). A test documents it. No new dependency: property tests use the engine's seeded RNG.
 
 Tests: 193 unit tests (66 new).
+
+### 2026-11-16 · Day 4 ✅
+| Task | Status | Notes |
+|------|--------|-------|
+| T4.1 MoveValidator | ✅ | `validateMove(state, action, ruleset)` → `Result`. Fixed check order: request shape → match active → turn → leader-cannot-pass → ownership → combination → beat. One test per error code, plus a test that the list of tested codes equals `MOVE_ERROR_CODES` |
+| T4.2 TurnManager | ✅ | `seatAfter` (CCW 0→3→2→1), `nextActiveSeat` skips locked seats, `roundIsOver`, `chooseFirstLeader` (random, or previous winner) |
+| T4.3 GameStateManager + WinnerEvaluator | ✅ | `createMatchState`, pure `applyAction` → `{ nextState, events }`, `findWinner`, plus `timeoutAction` (R27: pass, or the leader's lowest single) and `toPublicState` (card counts, no hands). Scripted game to completion; 150 seeded bot games all finish with cards conserved, and every step runs on a deep-frozen input to prove nothing is mutated |
+| T4.4 Hot-seat table | ✅ | `/dev/table`, dev-only (checked: not in the production bundle). Browser-checked: leader pass refused, invalid combo refused, a full match to a winner, next match led by the previous winner |
+
+Engine error codes (in `state.ts`, messages in `src/features/game/labels.ts`): `INVALID_REQUEST`, `MATCH_NOT_ACTIVE`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `LEADER_CANNOT_PASS`. The master prompt §13 list isn't in the repo, so the names not already in the docs were chosen here; rename in one place if they must match.
+
+Tests: 236 unit tests (43 new).
