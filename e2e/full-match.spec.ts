@@ -6,7 +6,8 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
  * through the UI and all see the persisted result. Runs against the local stack only.
  *
  * Strategy: whoever leads plays their lowest card; everyone else passes. The leader keeps the lead
- * and empties their hand in 10 rounds, so the other three never play and each pays cóng (15).
+ * and empties their hand in 10 rounds, so the other three never play: each owes cóng (15) but only has
+ * the 10 starting points, so pays 10 (R34, R35); the winner gets 30.
  */
 
 interface Player {
@@ -53,7 +54,7 @@ test('4 players: register → room → start → play to the end → result', as
 
   // The host's seat list fills in live, then the host starts. Everyone lands on the table.
   for (const g of guests) await expect(host!.page.getByRole('list', { name: 'Chỗ ngồi' })).toContainText(g.name)
-  await host!.page.getByRole('button', { name: 'Bắt đầu ván' }).click()
+  await host!.page.getByRole('button', { name: 'Bắt đầu ván (4 người)' }).click()
   for (const p of players) {
     await expect(p.page).toHaveURL(/\/match\//)
     await expect(p.page.locator('[aria-label="Bài của bạn"] [data-card]')).toHaveCount(10)
@@ -90,17 +91,18 @@ test('4 players: register → room → start → play to the end → result', as
   }
   expect(winner).not.toBeNull()
 
-  // Every player sees the same persisted result: winner +45, the others cóng −15.
+  // Every player sees the same persisted result: winner +30, the others cóng, capped at −10.
   for (const p of players) {
     const result = p.page.getByRole('region', { name: 'Kết quả' })
     await expect(result.getByRole('status')).toHaveText(p === winner ? 'Bạn thắng ván này! 🏆' : `${winner!.name} thắng ván này`)
     const rows = result.getByRole('table', { name: 'Kết quả ván' }).locator('tbody tr')
     await expect(rows).toHaveCount(4)
     await expect(rows.first()).toContainText(winner!.name)
-    await expect(rows.first()).toContainText('+45')
+    await expect(rows.first()).toContainText('+30')
     for (let r = 1; r < 4; r++) {
       await expect(rows.nth(r)).toContainText('Cóng')
-      await expect(rows.nth(r)).toContainText('-15')
+      await expect(rows.nth(r)).toContainText('-10')
+      await expect(rows.nth(r)).toContainText('Nợ 15, trả hết 10 điểm đang có')
     }
   }
 
@@ -108,9 +110,12 @@ test('4 players: register → room → start → play to the end → result', as
   const loser = players.find((p) => p !== winner)!
   await loser.page.getByRole('link', { name: 'Lịch sử' }).click()
   await expect(loser.page.getByRole('list', { name: 'Các ván đã chơi' }).getByRole('link')).toHaveCount(1)
-  await expect(loser.page.getByRole('list', { name: 'Các ván đã chơi' })).toContainText('-15')
+  await expect(loser.page.getByRole('list', { name: 'Các ván đã chơi' })).toContainText('-10')
   await winner!.page.getByRole('link', { name: 'Hồ sơ' }).click()
-  await expect(winner!.page.getByText('Tổng điểm').locator('..')).toContainText('45')
+  await expect(winner!.page.getByText('Tổng điểm').locator('..')).toContainText('40')
+  // The header shows the new balance; a loser is at 0 now.
+  await expect(winner!.page.getByLabel('Tài khoản')).toContainText('40 điểm')
+  await expect(loser.page.getByLabel('Tài khoản')).toContainText('0 điểm')
 
   // Back to the room: same 4 seats, the winner's seat leads next time (R14, R31).
   await players[1]!.page.goto('/')

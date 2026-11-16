@@ -36,3 +36,17 @@ export const matchIdSchema = z.object({ matchId: z.uuid() }).strict()
 
 export type PlayCardsBody = z.infer<typeof playCardsSchema>
 export type PassTurnBody = z.infer<typeof passTurnSchema>
+
+export const removeBotSchema = z.object({ roomId: z.uuid(), botId: z.uuid() }).strict()
+
+export const adminListSchema = z.object({ query: z.string().max(100).optional() }).strict()
+
+export const adminAdjustSchema = z
+  .object({
+    userId: z.uuid(),
+    delta: z.number().int().refine((d) => d !== 0 && Math.abs(d) <= 100_000, 'delta'),
+    reason: z.string().trim().min(3).max(200),
+  })
+  .strict()
+
+export const adminLockSchema = z.object({ userId: z.uuid(), locked: z.boolean() }).strict()

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { classify, parseCards, seatAfter, XAM_BASELINE_V1, type CardCode } from '@engine'
+import { classify, parseCards, seatAfter, XAM_BASELINE_V2, type CardCode } from '@engine'
 import { Button } from '@/components/ui/button'
 import { ConnectionBadge } from '@/components/ConnectionBadge'
 import { Hand } from '@/components/cards/Hand'
 import { PlayingCard } from '@/components/cards/PlayingCard'
 import { useAuthStore } from '@/features/auth/store'
 import { useSelectionStore } from '@/features/game/selectionStore'
+import { useProfileStore } from '@/features/profile/store'
 import { COMBINATION_LABEL } from '@/features/game/labels'
 import {
   abortMatch,
@@ -24,7 +25,9 @@ import { ApiCallError } from '@/lib/functions'
 import { useTopic } from '@/lib/realtime'
 import { cn } from '@/lib/utils'
 
-const R = XAM_BASELINE_V1
+// Only the combination rules are used here (for the "is this a valid play" hint); they are the same
+// in v1 and v2. The server is authoritative.
+const R = XAM_BASELINE_V2
 /** Extra wait after the deadline before claiming, plus random jitter so 4 clients don't all race. */
 const CLAIM_GRACE_MS = 1000
 const CLAIM_JITTER_MS = 1500
@@ -55,13 +58,14 @@ export function GameTablePage() {
   const selected = useSelectionStore((s) => s.selected)
   const clearSelection = useSelectionStore((s) => s.clear)
   const versionRef = useRef(0)
+  const refreshProfile = useProfileStore((s) => s.refresh)
 
   /** Server state is replaced wholesale; the hand is re-read on every new version (never broadcast). */
   const fetchState = useCallback(
     () =>
       Promise.all([fetchMatch(matchId), fetchMyHand(matchId)])
         .then(async ([match, myHand]) => {
-          const res = match && match.status === 'FINISHED' ? await fetchResults(matchId) : null
+          const res = match && match.status === 'FINISHED' && match.ranked ? await fetchResults(matchId) : null
           return { match, myHand, res }
         })
         .catch(() => 'error' as const),
@@ -115,6 +119,12 @@ export function GameTablePage() {
     return () => clearTimeout(id)
   }, [deadline, version, matchId, refresh])
 
+  // The balance in the header changes when a ranked match ends.
+  const finishedNow = match?.status === 'FINISHED'
+  useEffect(() => {
+    if (finishedNow && userId) void refreshProfile(userId)
+  }, [finishedNow, userId, refreshProfile])
+
   const secondsLeft = useSecondsLeft(deadline)
   const hint = useMemo(() => (selected.length ? classify(parseCards(selected), R) : null), [selected])
 
@@ -147,7 +157,10 @@ export function GameTablePage() {
   const isHost = match.hostId === userId
   // Opponents in play order after me (CCW).
   const order: SeatView[] = []
-  if (me) for (let s = seatAfter(me.seat, R), i = 0; i < 3; s = seatAfter(s, R), i++) order.push(match.seats[s]!)
+  // Everyone else in play order after me (CCW over this match's 2–4 seats); spectators see all seats.
+  const turns = { players: match.seats.length, direction: R.direction }
+  if (me) for (let s = seatAfter(me.seat, turns); s !== me.seat; s = seatAfter(s, turns)) order.push(match.seats[s]!)
+  else order.push(...match.seats)
 
   async function act(kind: 'play' | 'pass' | 'abort') {
     if (!match) return
@@ -183,9 +196,9 @@ export function GameTablePage() {
         )}
       </div>
 
-      <ol className="grid grid-cols-3 gap-2" aria-label="Đối thủ">
+      <ol className={cn('grid gap-2', order.length >= 3 ? 'grid-cols-3' : order.length === 2 ? 'grid-cols-2' : 'grid-cols-1')} aria-label="Đối thủ">
         {order.map((s) => (
-          <SeatBadge key={s.seat} seat={s} match={match} online={online.has(s.userId)} />
+          <SeatBadge key={s.seat} seat={s} match={match} online={s.isBot || online.has(s.userId)} />
         ))}
       </ol>
 
@@ -211,17 +224,28 @@ export function GameTablePage() {
           <p className="text-center text-xl font-semibold" role="status">
             {match.status === 'ABORTED'
               ? 'Ván đã bị huỷ (không tính điểm)'
+              : !me
+                ? `${winner?.displayName ?? 'Ván'} thắng ván này`
               : winner
                 ? winner.userId === userId
                   ? 'Bạn thắng ván này! 🏆'
                   : `${winner.displayName} thắng ván này`
                 : 'Ván đã kết thúc'}
           </p>
+          {!match.ranked && match.status === 'FINISHED' && (
+            <p className="text-center text-sm text-slate-600">Ván luyện tập có máy: không cộng/trừ điểm, không ghi vào lịch sử.</p>
+          )}
           {results && results.length > 0 && <ResultsTable results={results} userId={userId} />}
           <Button asChild className="mx-auto w-fit">
             <Link to={`/room/${match.roomId}`}>Về phòng</Link>
           </Button>
         </section>
+      )}
+
+      {!me && !finished && (
+        <p role="status" className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-sm text-slate-600">
+          Bạn đang xem ván này. Bạn sẽ được vào chơi từ ván sau khi có ghế trống.
+        </p>
       )}
 
       {me && !finished && (
@@ -297,7 +321,10 @@ function SeatBadge({ seat, match, online }: { seat: SeatView; match: MatchView; 
           title={online ? 'Đang online' : 'Mất kết nối'}
           className={cn('size-2 shrink-0 rounded-full', online ? 'bg-emerald-500' : 'bg-slate-300')}
         />
-        <span className="truncate">{seat.displayName}</span>
+        <span className="truncate">
+          {seat.isBot && <span aria-label="Máy">🤖 </span>}
+          {seat.displayName}
+        </span>
         {match.winnerSeat === seat.seat && ' 🏆'}
       </p>
       <p className="text-slate-600">
@@ -331,6 +358,11 @@ function ResultsTable({ results, userId }: { results: ResultView[]; userId: stri
                 {r.displayName}
                 {r.isWinner && ' 🏆'}
                 {r.penalties.cong && <span className="ml-1 rounded bg-red-50 px-1 text-xs text-red-700">Cóng</span>}
+                {r.penalties.owed !== undefined && (
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Nợ {r.penalties.owed}, trả hết {-r.scoreDelta} điểm đang có
+                  </span>
+                )}
               </td>
               <td className="py-2">
                 {r.remainingCards === 0 ? (

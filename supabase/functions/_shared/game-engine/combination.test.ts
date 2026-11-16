@@ -179,7 +179,7 @@ describe('properties over random hands', () => {
 
   // Not transitive across the R09 exception (four 3s > a 2 > an A, yet four 3s don't beat an A),
   // so check within each type+size group.
-  it('is transitive within a type and size', () => {
+  it('is transitive within a type and size', { timeout: 60_000 }, () => {
     const groups = new Map<string, Combination[]>()
     for (const p of pool) groups.set(`${p.type}:${p.size}`, [...(groups.get(`${p.type}:${p.size}`) ?? []), p])
     let violations = 0

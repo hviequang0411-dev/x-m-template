@@ -10,6 +10,7 @@ export interface SeatView {
   cardCount: number
   hasPlayed: boolean
   status: 'PLAYING' | 'WON' | 'LOST' | 'FORFEITED'
+  isBot: boolean
 }
 
 /** Public match state: the same shape as the `state` broadcast (plus display names). */
@@ -18,6 +19,8 @@ export interface MatchView {
   roomId: string
   hostId: string | null
   turnDeadline: string | null
+  /** False when a bot plays: no points, no results, no history [R36]. */
+  ranked: boolean
   version: number
   status: 'PLAYING' | 'FINISHED' | 'ABORTED'
   currentSeat: number
@@ -32,6 +35,7 @@ interface MatchRow {
   id: string
   room_id: string
   turn_deadline: string | null
+  ranked: boolean
   room: { host_id: string } | null
   version: number
   status: MatchView['status']
@@ -46,7 +50,7 @@ interface MatchRow {
     card_count: number
     has_played: boolean
     status: SeatView['status']
-    profile: { display_name: string } | null
+    profile: { display_name: string; is_bot: boolean } | null
   }[]
 }
 
@@ -64,6 +68,7 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
     roomId: data.room_id,
     hostId: data.room?.host_id ?? null,
     turnDeadline: data.turn_deadline,
+    ranked: data.ranked,
     version: data.version,
     status: data.status,
     currentSeat: data.current_seat,
@@ -80,6 +85,7 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
         cardCount: p.card_count,
         hasPlayed: p.has_played,
         status: p.status,
+        isBot: p.profile?.is_bot ?? false,
       })),
   }
 }
@@ -112,7 +118,8 @@ export interface ResultView {
   remainingCards: number
   remainingHand: CardCode[]
   scoreDelta: number
-  penalties: { cong?: boolean; thoi2?: number; thoiTuQuy?: string[] }
+  /** owed: what a capped loser should have paid (they paid their whole balance instead) [R35]. */
+  penalties: { cong?: boolean; thoi2?: number; thoiTuQuy?: string[]; owed?: number }
 }
 
 /** The results persisted by the server at match end (RLS: seated players). Never computed here. */

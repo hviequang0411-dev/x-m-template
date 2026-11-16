@@ -45,7 +45,16 @@ PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
   version, turn, card ownership and results under a row lock.
 - Hands are readable only by their owner and never broadcast.
 
-## Known limitations (v1)
+## Rules v2 (current)
+2–4 players per match; bots for practice (unranked); late joiners wait and watch; points balance starting at 10, 10 needed
+for a ranked match, losses capped at the balance; admin page. See [business rules §9](docs/BUSINESS_RULES.md).
+
+Make yourself admin (local or production SQL editor):
+```sql
+update public.profiles set is_admin = true where username = '<your username>';
+```
+
+## Known limitations
 - **Leaving mid-match (R29)** isn't supported: `leave-room` refuses during a match. An absent player is auto-passed after 30 s instead.
 - **Abort (R30)** only after 5 minutes without a move, by the host. Abort by agreement of all players isn't implemented.
 - Special rules are off: báo sâm, đền, instant wins, chặt chồng (R23–R26). Thối 2 / thối tứ quý are recorded but not scored (R19–R20).
@@ -53,4 +62,4 @@ PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
 - The local stack's Auth sign-in limit is raised for integration tests (`supabase/config.toml`); production uses the dashboard settings.
 
 ## Status
-Day 7 of 7: built and tested locally; production deployment pending (needs the Supabase and Vercel accounts, see [DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+Day 7 of 7 + rules v2 (2026-11-17): built and tested locally; production deployment pending (needs the Supabase and Vercel accounts, see [DEPLOYMENT.md](docs/DEPLOYMENT.md)).

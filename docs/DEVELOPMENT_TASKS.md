@@ -203,3 +203,16 @@ Tests: 301 unit tests, 150 pgTAP assertions, 23 integration tests.
 Also: `tsconfig.tests.json` puts `e2e/`, `tests/` and the test configs under `tsc -b`, so `verify` typechecks them.
 
 Final local state: 301 unit tests, 150 pgTAP assertions, 23 integration tests, 1 E2E test (full match), 17-check smoke test. All green.
+
+### 2026-11-17 · Rules v2 ✅ (requested changes)
+| Change | Status | Notes |
+|--------|--------|-------|
+| Start with 2+ players (R01b) | ✅ | Ruleset `xam-baseline` v2 (v1 kept, immutable). Engine turn order and dealing use the match's seat count; match seats are re-numbered 0..n−1; the previous winner is remembered by user |
+| Play against bots (R36) | ✅ | Host "Thêm máy"/"Bỏ"; bots are non-login accounts (banned, random password); `chooseBotMove` (legal-only, keeps 2s/four-of-a-kinds); the server plays bot turns in the background after every move. Bot matches are unranked |
+| Header shows points | ✅ | Name + balance + admin link; refreshed on navigation and at match end |
+| Admin page (R38) | ✅ | `/admin`: search accounts (with email), add/remove points with a logged reason (never below 0), lock/unlock. Admin = `profiles.is_admin`, set by SQL |
+| Waiting for late joiners (R37) | ✅ | Late joiners and members beyond 4 seats wait, watch the public table (no hands), and take free seats in join order after the match; max 8 members |
+| 10-point minimum, 1 point per card (R34, R35) | ✅ | New accounts start at 10; ranked start needs 10 from everyone; cóng 15 kept; losses capped at the balance, the winner gets what was paid (`penalties.owed` records the capped amount) |
+
+Tests: 325 unit, 177 pgTAP (new `005_v2_security`), 29 integration (new `v2-features`), 2 E2E (new bot match), smoke 20 checks. Browser-checked: header points + admin link, admin search/adjust (logged), waiting room points warning.
+Note: existing local accounts keep their balance (negative ones were clamped to 0); new accounts start at 10.

@@ -14,13 +14,14 @@ Nothing here has been run against a real project yet: it needs your Supabase and
    npx supabase login
    npx supabase link --project-ref <project-ref>
    ```
-3. Push the schema. This applies `supabase/migrations/0001…0008` in order, including the `xam-baseline` v1 ruleset row:
+3. Push the schema. This applies `supabase/migrations/0001…0012` in order, including the `xam-baseline` v1 ruleset row:
    ```bash
    npx supabase db push
    ```
 4. Deploy the Edge Functions (they share `supabase/functions/deno.json` as import map; `verify_jwt` is on for all):
    ```bash
-   npx supabase functions deploy create-room join-room leave-room start-match play-cards pass-turn claim-timeout finish-match
+   npx supabase functions deploy create-room join-room leave-room start-match play-cards pass-turn claim-timeout finish-match \
+     add-bot remove-bot admin-users admin-adjust-points admin-set-locked
    ```
    `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically. Do **not** add the
    service-role key anywhere else.
@@ -47,7 +48,7 @@ Nothing here has been run against a real project yet: it needs your Supabase and
 ```bash
 node scripts/smoke.mjs https://<project-ref>.supabase.co <anon-key> https://<app-url>
 ```
-It uses only public values and checks that anon can't read game tables, all 8 functions are deployed and answer
+It uses only public values and checks that anon can't read game tables, all 13 functions are deployed and answer
 `401 UNAUTHORIZED` in our envelope, CORS preflight works, deep links serve the app, and the built bundle contains no
 service-role key. Then play one match with 4 accounts ([BETA_CHECKLIST.md](BETA_CHECKLIST.md)).
 

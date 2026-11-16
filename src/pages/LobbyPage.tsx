@@ -110,7 +110,7 @@ export function LobbyPage() {
             <CardTitle>Phòng hiện tại</CardTitle>
             <CardDescription>
               Mã phòng <span className="font-mono font-semibold">{room.code}</span> ·{' '}
-              {ROOM_STATUS_LABEL[room.status]} · Ghế {room.seat + 1}
+              {ROOM_STATUS_LABEL[room.status]} · {room.seat === null ? 'Đang trong hàng chờ' : `Ghế ${room.seat + 1}`}
             </CardDescription>
           </CardHeader>
           <CardContent>

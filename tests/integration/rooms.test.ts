@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { adminClient, call, errorCode, fullRoom, newPlayer, newPlayers, okBody } from './helpers'
 
 describe('create-room / join-room / leave-room (T5.2)', () => {
-  it('4 users join one room in seats 0..3; a 5th gets ROOM_FULL; rejoining gets ALREADY_IN_ROOM', async () => {
+  it('4 users join one room in seats 0..3; a 5th waits without a seat; rejoining gets ALREADY_IN_ROOM', async () => {
     const { roomId, code, players } = await fullRoom()
     const { data: seats } = await adminClient()
       .from('room_players')
@@ -14,8 +14,7 @@ describe('create-room / join-room / leave-room (T5.2)', () => {
     expect(seats?.map((s) => s.seat)).toEqual([0, 1, 2, 3])
 
     const fifth = await call(await newPlayer(), 'join-room', { code })
-    expect([fifth.status, errorCode(fifth)]).toEqual([409, 'ROOM_FULL'])
-    expect(fifth.body).toMatchObject({ error: { message: 'Phòng đã đủ 4 người' } })
+    expect(fifth.body).toMatchObject({ ok: true, role: 'WAITING', seat: null })
 
     const again = await call(players[2]!, 'join-room', { code })
     expect([again.status, errorCode(again)]).toEqual([409, 'ALREADY_IN_ROOM'])

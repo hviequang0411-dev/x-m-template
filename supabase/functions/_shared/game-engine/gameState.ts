@@ -50,18 +50,20 @@ export function applyAction(
   const valid = validateMove(state, action, ruleset)
   if (!valid.ok) return valid
   const seat = action.seat
+  // Turn order runs over the seats this match actually has (2–4).
+  const turns = { players: state.seats.length, direction: ruleset.direction }
 
   if (valid.value.type === 'PASS') {
     const passedSeats = [...state.passedSeats, seat]
     const events: GameEvent[] = [{ type: 'PASSED', seat }]
-    if (roundIsOver(state.leadSeat, passedSeats, ruleset)) {
+    if (roundIsOver(state.leadSeat, passedSeats, turns)) {
       events.push({ type: 'ROUND_RESET', leadSeat: state.leadSeat })
       return ok({
         nextState: { ...state, currentTrick: null, passedSeats: [], currentSeat: state.leadSeat },
         events,
       })
     }
-    const next = nextActiveSeat(seat, passedSeats, ruleset)!
+    const next = nextActiveSeat(seat, passedSeats, turns)!
     return ok({ nextState: { ...state, passedSeats, currentSeat: next }, events })
   }
 
@@ -81,7 +83,7 @@ export function applyAction(
     })
   }
 
-  const next = nextActiveSeat(seat, state.passedSeats, ruleset)
+  const next = nextActiveSeat(seat, state.passedSeats, turns)
   if (next === null) {
     // Everyone else already passed: the player who just played leads a fresh round.
     events.push({ type: 'ROUND_RESET', leadSeat: seat })

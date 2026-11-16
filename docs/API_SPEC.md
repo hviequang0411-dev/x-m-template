@@ -18,7 +18,9 @@ All game writes go through these Edge Functions. Reads go through PostgREST with
 | Function | Body | Result | Errors |
 |---|---|---|---|
 | `create-room` | `{}` | `{ roomId, code, seat: 0 }` | `ALREADY_IN_ROOM` |
-| `join-room` | `{ code }` (6 chars, case-insensitive, no 0/O/1/I) | `{ roomId, code, seat }` (lowest free seat) | `ROOM_NOT_FOUND`, `ROOM_FULL`, `ALREADY_IN_ROOM`, `MATCH_IN_PROGRESS` |
+| `join-room` | `{ code }` (6 chars, case-insensitive, no 0/O/1/I) | `{ roomId, code, seat, role }`: the lowest free seat (`role: PLAYER`) while the room is waiting; otherwise `role: WAITING`, `seat: null` (R37) | `ROOM_NOT_FOUND`, `ROOM_FULL` (8 members), `ALREADY_IN_ROOM`, `ACCOUNT_LOCKED` |
+| `add-bot` | `{ roomId }` | `{ roomId, botId, seat }` | `NOT_ROOM_HOST`, `ROOM_FULL` (no free seat), `MATCH_IN_PROGRESS` |
+| `remove-bot` | `{ roomId, botId }` | `{ roomId, botId, removed: true }` | `NOT_ROOM_HOST`, `INVALID_REQUEST` (not a bot in this room), `MATCH_IN_PROGRESS` |
 | `leave-room` | `{ roomId }` | `{ roomId, left: true }` | `NOT_ROOM_MEMBER`, `MATCH_IN_PROGRESS` (leaving mid-match is not supported yet) |
 
 Host leaves → the lowest occupied seat becomes host; the last one out closes the room (R33).
@@ -26,7 +28,7 @@ Host leaves → the lowest occupied seat becomes host; the last one out closes t
 ## Matches
 | Function | Body | Result | Errors |
 |---|---|---|---|
-| `start-match` | `{ roomId }` | `{ matchId, version: 1, state }` | `NOT_ROOM_MEMBER`, `NOT_ROOM_HOST`, `NOT_ENOUGH_PLAYERS`, `MATCH_IN_PROGRESS` |
+| `start-match` | `{ roomId }` | `{ matchId, version: 1, ranked, state }` | `NOT_ROOM_MEMBER`, `NOT_ROOM_HOST`, `NOT_ENOUGH_PLAYERS` (fewer than 2 seated), `NOT_ENOUGH_POINTS` (ranked and someone has < 10), `ACCOUNT_LOCKED`, `MATCH_IN_PROGRESS` |
 | `play-cards` | `{ actionId, matchId, expectedVersion, cards: ["3S", …] }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `MATCH_NOT_ACTIVE` |
 | `pass-turn` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `LEADER_CANNOT_PASS`, `MATCH_NOT_ACTIVE` |
 | `claim-timeout` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `TURN_NOT_EXPIRED`, `VERSION_CONFLICT`, `MATCH_NOT_ACTIVE` |
@@ -38,6 +40,20 @@ Host leaves → the lowest occupied seat becomes host; the last one out closes t
   auto-plays its lowest single when leading (R27).
 - `finish-match` aborts only (never declares a winner): host only, after 5 minutes without a move (R30).
 - When a play empties a hand the match ends in the same transaction: `match_results` and profile totals are written once.
+
+- Ruleset v2: 2–4 seated players start; match seats are re-numbered 0…n−1. A match with a bot is `ranked: false`: no
+  results, no points. After each human move (and after a start or a timeout claim) the server plays bots' turns in the
+  background, one move about every 0.8 s.
+- Ranked results: `score_delta` is what was actually paid; a loser who owed more than their balance has `penalties.owed` (R35).
+
+## Admin (R38)
+All three require `profiles.is_admin` (set by SQL); otherwise `NOT_ADMIN` (403).
+
+| Function | Body | Result | Errors |
+|---|---|---|---|
+| `admin-users` | `{ query? }` | `{ users: [{ id, username, display_name, email, total_score, matches_played, matches_won, is_admin, is_locked, created_at }] }` (humans only, max 100) | `NOT_ADMIN` |
+| `admin-adjust-points` | `{ userId, delta (≠ 0), reason (3–200 chars) }` | `{ userId, balance }`, logged in `point_adjustments` | `NOT_ADMIN`, `BALANCE_NEGATIVE`, `INVALID_REQUEST` |
+| `admin-set-locked` | `{ userId, locked }` | `{ userId, locked }` | `NOT_ADMIN`, `INVALID_REQUEST` (yourself, or a bot) |
 
 ## Common errors
 | Code | HTTP | When |
@@ -63,8 +79,8 @@ Never contains a hand. Card codes: rank `3-9 T J Q K A 2` + suit `S C D H`.
 
 ## Realtime
 Private channels, authorised by RLS on `realtime.messages`:
-- `room:<roomId>`: active room members. Events `players_changed`, `match_started { matchId }`, `match_finished { matchId }`.
+- `room:<roomId>`: active room members, seated or waiting. Events `players_changed`, `match_started { matchId }`, `match_finished { matchId }`.
   Presence (key = user id) shows who is online.
-- `match:<matchId>`: seated players. Event `state` = the public state above, sent after each commit.
+- `match:<matchId>`: seated players and the room's waiting members (watching). Event `state` = the public state above, sent after each commit.
 
 Clients treat every event as "refetch"; their own hand is always re-read from `player_private_states` (own row only).

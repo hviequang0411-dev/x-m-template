@@ -3,7 +3,7 @@
 //
 //   node scripts/smoke.mjs <SUPABASE_URL> <ANON_KEY> [APP_URL]
 //
-// Checks: REST is up and closed to anon; every Edge Function is deployed and rejects anonymous
+// Checks: REST is up and closed to anon; every Edge Function (13) is deployed and rejects anonymous
 // calls with our error envelope; the approved ruleset isn't readable by anon; the app (if given)
 // serves index.html for deep links (SPA rewrite).
 
@@ -13,7 +13,10 @@ if (!url || !anonKey) {
   process.exit(2)
 }
 
-const FUNCTIONS = ['create-room', 'join-room', 'leave-room', 'start-match', 'play-cards', 'pass-turn', 'claim-timeout', 'finish-match']
+const FUNCTIONS = [
+  'create-room', 'join-room', 'leave-room', 'start-match', 'play-cards', 'pass-turn', 'claim-timeout', 'finish-match',
+  'add-bot', 'remove-bot', 'admin-users', 'admin-adjust-points', 'admin-set-locked',
+]
 const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' }
 const results = []
 const check = async (name, fn) => {

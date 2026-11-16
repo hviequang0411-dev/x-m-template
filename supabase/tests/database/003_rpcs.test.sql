@@ -3,11 +3,11 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(28);
 
--- Five users: u1..u4 fill a room, u5 is an outsider.
+-- Six users: u1..u4 fill a room, u5 joins as a waiting member, u6 is an outsider.
 insert into auth.users (id, email, raw_user_meta_data, aud, role)
 select ('d000000' || i || '-0000-0000-0000-000000000000')::uuid, 'rpc' || i || '@test.local',
        jsonb_build_object('username', 'rpc_user_' || i), 'authenticated', 'authenticated'
-from generate_series(1, 5) i;
+from generate_series(1, 6) i;
 
 create temp table ids (k text primary key, v uuid);
 grant all on ids to authenticated;
@@ -38,16 +38,16 @@ select throws_ok(format($$ select public.join_room('d0000002-0000-0000-0000-0000
 select throws_ok($$ select public.join_room('d0000005-0000-0000-0000-000000000000', 'ZZZZZ9') $$,
   'P0001', 'ROOM_NOT_FOUND', 'unknown code');
 
--- Start with 2 players
+-- 2 players is enough under v2 [R01b]; the (empty) deal is what gets rejected here.
 select throws_ok(format($$ select public.start_match('d0000001-0000-0000-0000-000000000000', %L, '[]', 0::smallint) $$,
-  (select v from ids where k = 'room')), 'P0001', 'NOT_ENOUGH_PLAYERS', 'start_match needs 4 players');
+  (select v from ids where k = 'room')), 'P0001', 'INVALID_REQUEST', 'with 2 players the count is fine; an empty deal is rejected');
 
 select public.join_room(('d000000' || i || '-0000-0000-0000-000000000000')::uuid,
   (select code from public.game_rooms where id = (select v from ids where k = 'room')))
 from generate_series(3, 4) i;
-select throws_ok(format($$ select public.join_room('d0000005-0000-0000-0000-000000000000', %L) $$,
-  (select code from public.game_rooms where id = (select v from ids where k = 'room'))),
-  'P0001', 'ROOM_FULL', 'a 5th player gets ROOM_FULL');
+select is((public.join_room('d0000005-0000-0000-0000-000000000000',
+  (select code from public.game_rooms where id = (select v from ids where k = 'room'))) ->> 'role'),
+  'WAITING', 'a 5th member waits for a seat instead of being refused [R37]');
 
 -- A valid deal: seat i gets cards i, i+4, … from the canonical deck order.
 create temp table deal as
@@ -65,7 +65,7 @@ select jsonb_agg(hand order by seat) as hands from (
 select throws_ok(format($$ select public.start_match('d0000002-0000-0000-0000-000000000000', %L, %L, 0::smallint) $$,
   (select v from ids where k = 'room'), (select hands from deal)), 'P0001', 'NOT_ROOM_HOST', 'only the host can start');
 select throws_ok(format($$ select public.start_match('d0000005-0000-0000-0000-000000000000', %L, %L, 0::smallint) $$,
-  (select v from ids where k = 'room'), (select hands from deal)), 'P0001', 'NOT_ROOM_MEMBER', 'an outsider cannot start');
+  (select v from ids where k = 'room'), (select hands from deal)), 'P0001', 'NOT_ROOM_HOST', 'a waiting member who is not the host cannot start');
 select throws_ok(format($$ select public.start_match('d0000001-0000-0000-0000-000000000000', %L, %L, 0::smallint) $$,
   (select v from ids where k = 'room'), '[["3S"],["4S"],["5S"],["6S"]]'), 'P0001', 'INVALID_REQUEST', 'a short deal is rejected');
 select throws_ok(format($$ select public.start_match('d0000001-0000-0000-0000-000000000000', %L, %L, 0::smallint) $$,
@@ -100,7 +100,7 @@ select set_config('request.jwt.claims', '{"sub":"d0000002-0000-0000-0000-0000000
 set local role authenticated;
 select ok(public.can_access_topic('match:' || (select v from ids where k = 'match'))
           and public.can_access_topic('room:' || (select v from ids where k = 'room')), 'a player may use the room and match topics');
-select set_config('request.jwt.claims', '{"sub":"d0000005-0000-0000-0000-000000000000","role":"authenticated"}', true);
+select set_config('request.jwt.claims', '{"sub":"d0000006-0000-0000-0000-000000000000","role":"authenticated"}', true);
 select ok(not public.can_access_topic('match:' || (select v from ids where k = 'match'))
           and not public.can_access_topic('room:not-a-uuid')
           and not public.can_access_topic('other:' || (select v from ids where k = 'room')), 'an outsider and malformed topics are refused');

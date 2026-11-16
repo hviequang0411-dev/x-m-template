@@ -43,7 +43,7 @@ select is((select count(*)::int from public.matches), 1, 'player sees her match'
 select is((select count(*)::int from public.match_players), 2, 'player sees public seat info');
 select is((select count(*)::int from public.game_actions), 1, 'player sees the action log');
 select ok((select count(*) from public.profiles) >= 3, 'profiles are readable (names only)');
-select is((select count(*)::int from public.game_rulesets), 1, 'approved rulesets are readable');
+select is((select count(*)::int from public.game_rulesets), 2, 'approved rulesets are readable (v1 and v2)');
 
 -- No writes to authoritative state (42501 = insufficient_privilege).
 select throws_ok($$insert into public.game_rooms (code, host_id, ruleset_id)

@@ -205,6 +205,12 @@ only for members, and allow `INSERT` (client send) only for Presence on `room:<i
 | `20261116000006_realtime_policies.sql` | `can_access_topic`, `realtime.messages` policies (receive on `room:`/`match:` for members, Presence insert on `room:`) | ✅ applied |
 | `20261116000007_results_timeout_abort.sql` | `apply_game_action` v2 (TIMEOUT_PASS/TIMEOUT_PLAY claims, `p_results` verified and written to `match_results` + `profiles` once), `finish_match` (abort) | ✅ applied |
 | `20261116000008_null_safe_result_checks.sql` | `apply_game_action`: NULL-safe result checks (see below) | ✅ applied |
+| `20261117000009_rules_v2_schema.sql` | ruleset v2 row; `profiles.is_admin / is_locked / is_bot`, balance default 10 and ≥ 0; `room_players.role` (PLAYER/WAITING, nullable seat); `game_rooms.last_winner_user_id`; `matches.ranked`; `point_adjustments`; `can_view_match` (watchers) | ✅ applied |
+| `20261117000010_room_rpcs_v2.sql` | `create_room`/`join_room`/`leave_room` v2, `promote_waiting`, `free_seat`, `add_bot`, `remove_bot`, `idle_bot`, `assert_not_locked` | ✅ applied |
+| `20261117000011_game_rpcs_v2.sql` | `start_match` (2–4, ranked, 10-point minimum), `apply_game_action` (balance cap, unranked bot matches, promotion), `finish_match`, `match_public_state` (+ranked) | ✅ applied |
+| `20261117000012_admin.sql` | `admin_list_users`, `admin_adjust_points`, `admin_set_locked` | ✅ applied |
+
+**Making an admin:** `update public.profiles set is_admin = true where username = '<username>';` (SQL editor or psql; there is no UI for it).
 
 The room RPCs moved from 0002 to Day 5 so they're written alongside the Edge Functions that call them.
 

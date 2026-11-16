@@ -2,7 +2,7 @@
 -- (results, timeout, abort) enforce their rules.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(63);
 
 -- 1. No client write privilege on any game table, for any operation --------------------------------
 select ok(not has_table_privilege(r, 'public.' || t, op), format('%s has no %s on %s', r, op, t))
@@ -117,11 +117,17 @@ select throws_ok(format($$ select public.apply_game_action(%L, gen_random_uuid()
 select lives_ok(format($$ select public.apply_game_action(%L, gen_random_uuid(), 'e0000004-0000-0000-0000-000000000000', 2, 'PLAY', '{2H}', %L, %L) $$,
   (select v from ids where k = 'match'), (select next from win_next), (select res from good_results)), 'correct results are accepted');
 select is((select array_agg(score_delta order by seat) from public.match_results where match_id = (select v from ids where k = 'match')),
-  array[-9, -15, -15, 39], 'match_results hold the verified scores');
+  array[-9, -10, -10, 29], 'match_results hold what was paid: cóng 15 capped at the 10-point balance [R35]');
+select is((select penalties ->> 'owed' from public.match_results where match_id = (select v from ids where k = 'match') and seat = 1),
+  '15', 'a capped loss records what was owed');
 select is((select array_agg(total_score::text || '/' || matches_played || '/' || matches_won order by id) from public.profiles
            where id in (select user_id from public.match_players where match_id = (select v from ids where k = 'match'))),
-  array['-9/1/0', '-15/1/0', '-15/1/0', '39/1/1'], 'profiles are updated once');
+  array['1/1/0', '0/1/0', '0/1/0', '39/1/1'], 'profiles are updated once and never go below 0');
 select is((select status from public.game_rooms where id = (select v from ids where k = 'room')), 'WAITING', 'room returns to WAITING [R31]');
+
+-- Top balances back up so the next ranked match may start [R34].
+update public.profiles set total_score = 10
+where id in (select user_id from public.match_players where match_id = (select v from ids where k = 'match')) and total_score < 10;
 
 -- 4. Abort (R30) ---------------------------------------------------------------------------------
 insert into ids select 'match2', (public.start_match('e0000001-0000-0000-0000-000000000000',

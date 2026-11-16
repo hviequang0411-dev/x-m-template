@@ -459,3 +459,23 @@ import_map = "./functions/deno.json"
 [functions.finish-match]
 verify_jwt = true
 import_map = "./functions/deno.json"
+
+[functions.add-bot]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.remove-bot]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.admin-users]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.admin-adjust-points]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.admin-set-locked]
+verify_jwt = true
+import_map = "./functions/deno.json"

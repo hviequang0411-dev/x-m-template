@@ -1,6 +1,8 @@
 # BUSINESS RULES — Xam Online
 
-Ruleset: **`xam-baseline` v1** · Status: **APPROVED 2026-11-16** · Source: [RULE_DECISIONS.md](RULE_DECISIONS.md) (IDs in brackets)
+Rulesets: **`xam-baseline` v2** (current, APPROVED 2026-11-17) and v1 (APPROVED 2026-11-16, kept for old matches) · Source: [RULE_DECISIONS.md](RULE_DECISIONS.md) (IDs in brackets)
+
+Sections 1–8 describe v1; **section 9 lists what v2 changes**. New rooms use v2.
 
 This is the top-priority source of truth. Any change requires a new ruleset version.
 
@@ -60,3 +62,11 @@ Báo Sâm, báo 1 + đền, instant wins (tới trắng), chain bombing (chặt 
 24. After a match the room returns to WAITING with the same seats. [R31]
 25. Rooms are private and joined by a 6-character code. There is no public room list. [R32]
 26. A room is CLOSED by the host or after 30 minutes with no members. If the host leaves, the lowest occupied seat becomes host. [R33]
+
+## 9. Ruleset v2 changes (APPROVED 2026-11-17) [R01b, R34–R38]
+27. **2–4 players.** The host may start once at least 2 players are seated (rule 1 said exactly 4). Everyone still gets 10 cards; the rest are discarded unseen. Seats are numbered 0…n−1 for the match, and play is counter-clockwise over those seats. [R01b]
+28. **Points balance.** A profile's points are a balance: new accounts start with **10**. A ranked match can start only if **every** player has at least 10 points. [R34]
+29. **Scoring unchanged, but capped.** Losers still owe 1 point per card left, or 15 for cóng. Nobody pays more than their balance: a loser with fewer points than they owe pays everything they have, and the winner receives the total actually paid. Balances never go below 0. [R35]
+30. **Bots.** The host can add bots ("máy") to free seats while the room is waiting, and remove them. The server plays a bot's turn about 0.8 s after it becomes its turn. **A match with any bot is a practice match**: no points change, no 10-point requirement, no results or history. [R36]
+31. **Waiting members.** Someone who joins while a match is being played, or when all 4 seats are taken, joins as a **waiting member**: they can watch the public table (card counts, plays; never hands) and take free seats in join order when the room is waiting again. A room holds at most 8 members. Waiting members may leave at any time. [R37]
+32. **Admins.** Accounts marked as admin in the database can list accounts, add or remove points (always with a logged reason; never below 0) and lock/unlock accounts. Locked accounts can't create, join or start rooms. Points still have no monetary value (rule 19): they are never bought, sold or transferred. [R38]

@@ -46,6 +46,7 @@ export const router = createBrowserRouter([
           { path: '/match/:matchId', lazy: async () => ({ Component: (await import('@/pages/GameTablePage')).GameTablePage }) },
           { path: '/profile', lazy: async () => ({ Component: (await import('@/pages/ProfilePage')).ProfilePage }) },
           { path: '/history', lazy: async () => ({ Component: (await import('@/pages/HistoryPage')).HistoryPage }) },
+          { path: '/admin', lazy: async () => ({ Component: (await import('@/pages/AdminPage')).AdminPage }) },
         ],
       },
     ],

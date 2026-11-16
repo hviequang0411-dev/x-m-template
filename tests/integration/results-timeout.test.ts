@@ -62,8 +62,9 @@ describe('scores persisted at match end (T6.1)', () => {
       .order('seat')
     expect(results).toHaveLength(4) // readable by any seated player (RLS)
     for (const r of results!) {
-      if (r.seat === leaderSeat) expect(r).toMatchObject({ is_winner: true, remaining_cards: 0, score_delta: 45, penalties: {} })
-      else expect(r).toMatchObject({ is_winner: false, remaining_cards: 10, score_delta: -15, penalties: { cong: true } })
+      // Each loser owes cóng 15 but starts with 10 points, so pays 10 [R35]; the winner gets 30.
+      if (r.seat === leaderSeat) expect(r).toMatchObject({ is_winner: true, remaining_cards: 0, score_delta: 30, penalties: {} })
+      else expect(r).toMatchObject({ is_winner: false, remaining_cards: 10, score_delta: -10, penalties: { cong: true, owed: 15 } })
     }
     expect(results!.reduce((s, r) => s + r.score_delta, 0)).toBe(0)
 

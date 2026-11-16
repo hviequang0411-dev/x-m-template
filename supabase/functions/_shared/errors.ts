@@ -15,7 +15,9 @@ export const API_ERRORS = {
   ALREADY_IN_ROOM: { status: 409, message: 'Bạn đang ở trong một phòng khác' },
   NOT_ROOM_MEMBER: { status: 403, message: 'Bạn không ở trong phòng này' },
   NOT_ROOM_HOST: { status: 403, message: 'Chỉ chủ phòng mới làm được việc này' },
-  NOT_ENOUGH_PLAYERS: { status: 409, message: 'Cần đủ 4 người để bắt đầu' },
+  NOT_ENOUGH_PLAYERS: { status: 409, message: 'Cần ít nhất 2 người chơi để bắt đầu' },
+  NOT_ENOUGH_POINTS: { status: 409, message: 'Mỗi người chơi cần ít nhất 10 điểm để chơi ván tính điểm' },
+  ACCOUNT_LOCKED: { status: 403, message: 'Tài khoản đang bị khoá' },
   MATCH_IN_PROGRESS: { status: 409, message: 'Ván đang diễn ra' },
   // matches
   MATCH_NOT_FOUND: { status: 404, message: 'Không tìm thấy ván' },
@@ -28,6 +30,8 @@ export const API_ERRORS = {
   CARD_NOT_OWNED: { status: 400, message: 'Bạn không có lá bài này' },
   INVALID_COMBINATION: { status: 400, message: 'Các lá đã chọn không tạo thành bộ hợp lệ' },
   CANNOT_BEAT_CURRENT_PLAY: { status: 409, message: 'Bộ này không chặn được bài trên bàn' },
+  NOT_ADMIN: { status: 403, message: 'Bạn không có quyền quản trị' },
+  BALANCE_NEGATIVE: { status: 409, message: 'Không thể trừ quá số điểm hiện có' },
   TURN_NOT_EXPIRED: { status: 409, message: 'Chưa hết thời gian lượt' },
   INTERNAL_ERROR: { status: 500, message: 'Có lỗi xảy ra, vui lòng thử lại' },
 } as const satisfies Record<string, { status: number; message: string }>
@@ -59,6 +63,7 @@ const CONSTRAINT_CODES: Record<string, ApiErrorCode> = {
   room_players_one_active_room_key: 'ALREADY_IN_ROOM',
   room_players_active_member_key: 'ALREADY_IN_ROOM',
   room_players_active_seat_key: 'VERSION_CONFLICT',
+  room_players_role_seat: 'INTERNAL_ERROR',
   matches_one_playing_per_room: 'MATCH_IN_PROGRESS',
 }
 

@@ -8,6 +8,8 @@ export interface Profile {
   total_score: number
   matches_played: number
   matches_won: number
+  is_admin: boolean
+  is_locked: boolean
 }
 
 export async function fetchMyProfile(userId: string): Promise<Profile | null> {

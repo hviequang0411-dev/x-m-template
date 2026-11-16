@@ -80,6 +80,17 @@ Legend: **Blocks** = earliest sprint day that cannot be completed without the an
 
 ---
 
+## E. Ruleset v2 (requested 2026-11-17, approved 2026-11-17)
+
+| ID | Topic | Decision | Status |
+|----|-------|----------|--------|
+| R01b | **Player count** | Replaces "exactly 4" in R01 for v2: a match may start with **2–4** seated players. 10 cards each. | APPROVED |
+| R34 | **Minimum points** | New accounts start with **10 points**; every player needs ≥ 10 points to start a **ranked** match. | APPROVED |
+| R35 | **Paying more than you have** | R17/R18 amounts are kept (1/card, cóng 15) but a loser pays at most their balance; the winner gets what was actually paid. Balances never go below 0. | APPROVED |
+| R36 | **Playing against bots** | The host adds bots to free seats. Matches with a bot are **unranked**: no points, no 10-point requirement, no history. | APPROVED |
+| R37 | **Joining late / full room** | Late joiners and members beyond 4 seats **wait** (watch the public table), and take free seats in join order when the room is waiting. Max 8 members. | APPROVED |
+| R38 | **Admin** | `profiles.is_admin` set by SQL only. Admins list/search accounts, adjust points with a logged reason, lock/unlock accounts. No admin can lock themselves. | APPROVED |
+
 ## Conflicts and gaps found in the source documents
 
 | # | Issue | Proposed resolution |

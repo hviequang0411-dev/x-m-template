@@ -49,7 +49,7 @@ describe('frontend queries against the real database', () => {
     for (const [name, r] of Object.entries(queries)) expect({ name, status: r.status, error: r.error }).toEqual({ name, status: 200, error: null })
 
     expect(queries.activeRoom.data).toMatchObject({ seat: 1, room: { id: roomId, status: 'WAITING' } })
-    expect((queries.room.data as { players: unknown[] }).players).toHaveLength(4)
+    expect((queries.room.data as unknown as { players: unknown[] }).players).toHaveLength(4)
     expect(queries.match.data).toMatchObject({ id: matchId, status: 'FINISHED', room: { host_id: players[0]!.userId } })
     expect((queries.match.data as unknown as { players: { profile: { display_name: string } }[] }).players[0]!.profile.display_name).toBeTruthy()
     expect(queries.results.data).toHaveLength(4)

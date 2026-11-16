@@ -1,13 +1,11 @@
 /**
- * Ruleset `xam-baseline` v1 (approved 2026-11-16, docs/BUSINESS_RULES.md).
- * Must stay identical to the `game_rulesets.config` row seeded in migration 0001.
- * A rule change means a NEW version, never an edit to this object.
+ * Rulesets (docs/BUSINESS_RULES.md). Each constant must stay identical to its `game_rulesets.config`
+ * row: v1 is seeded in migration 0001, v2 in migration 0009. A rule change means a NEW version,
+ * never an edit to an existing object.
  */
 
-export interface GameRuleSet {
+interface RuleSetCommon {
   readonly code: 'xam-baseline'
-  readonly version: 1
-  readonly players: 4
   readonly handSize: 10
   readonly direction: 'CCW'
   readonly suitsMatter: false
@@ -24,12 +22,6 @@ export interface GameRuleSet {
   readonly firstLeader: 'RANDOM'
   readonly nextLeader: 'PREVIOUS_WINNER'
   readonly endCondition: 'FIRST_OUT'
-  readonly scoring: {
-    readonly perCard: 1
-    readonly congPenalty: 15
-    readonly thoi2: 0
-    readonly thoiTuQuy: 0
-  }
   readonly turnTimeoutSeconds: 30
   readonly flags: {
     readonly baoSam: false
@@ -37,6 +29,44 @@ export interface GameRuleSet {
     readonly instantWin: false
     readonly chainBomb: false
   }
+}
+
+/** v1 (approved 2026-11-16): exactly 4 players, uncapped losses. */
+export interface GameRuleSetV1 extends RuleSetCommon {
+  readonly version: 1
+  readonly players: 4
+  readonly scoring: {
+    readonly perCard: 1
+    readonly congPenalty: 15
+    readonly thoi2: 0
+    readonly thoiTuQuy: 0
+  }
+}
+
+/**
+ * v2 (approved 2026-11-17): 2–4 players [R01b]; a player needs 10 points to play a ranked match and
+ * never loses more than their balance [R34, R35]; matches with a bot are unranked [R36].
+ */
+export interface GameRuleSetV2 extends RuleSetCommon {
+  readonly version: 2
+  readonly minPlayers: 2
+  readonly maxPlayers: 4
+  readonly scoring: {
+    readonly perCard: 1
+    readonly congPenalty: 15
+    readonly thoi2: 0
+    readonly thoiTuQuy: 0
+    readonly minBalanceToPlay: 10
+    readonly capLossAtBalance: true
+  }
+  readonly botMatchesRanked: false
+}
+
+export type GameRuleSet = GameRuleSetV1 | GameRuleSetV2
+
+/** How many seats a match under this ruleset may have. */
+export function playerRange(ruleset: GameRuleSet): { readonly min: number; readonly max: number } {
+  return ruleset.version === 1 ? { min: 4, max: 4 } : { min: ruleset.minPlayers, max: ruleset.maxPlayers }
 }
 
 function deepFreeze<T>(value: T): T {
@@ -47,7 +77,7 @@ function deepFreeze<T>(value: T): T {
   return value
 }
 
-export const XAM_BASELINE_V1: GameRuleSet = deepFreeze({
+export const XAM_BASELINE_V1: GameRuleSetV1 = deepFreeze({
   code: 'xam-baseline',
   version: 1,
   players: 4,
@@ -66,7 +96,31 @@ export const XAM_BASELINE_V1: GameRuleSet = deepFreeze({
   flags: { baoSam: false, baoMotDen: false, instantWin: false, chainBomb: false },
 })
 
-const KNOWN_RULESETS: readonly GameRuleSet[] = [XAM_BASELINE_V1]
+export const XAM_BASELINE_V2: GameRuleSetV2 = deepFreeze({
+  code: 'xam-baseline',
+  version: 2,
+  minPlayers: 2,
+  maxPlayers: 4,
+  handSize: 10,
+  direction: 'CCW',
+  suitsMatter: false,
+  straight: { min: 3, max: 10, aceLow: true, twoAllowed: 'LOW_ONLY', wrap: false },
+  fourOfAKindBeats: 'SINGLE_TWO',
+  passLocksRound: true,
+  leaderCanPass: false,
+  firstLeader: 'RANDOM',
+  nextLeader: 'PREVIOUS_WINNER',
+  endCondition: 'FIRST_OUT',
+  scoring: { perCard: 1, congPenalty: 15, thoi2: 0, thoiTuQuy: 0, minBalanceToPlay: 10, capLossAtBalance: true },
+  turnTimeoutSeconds: 30,
+  flags: { baoSam: false, baoMotDen: false, instantWin: false, chainBomb: false },
+  botMatchesRanked: false,
+})
+
+/** The ruleset new rooms use. */
+export const CURRENT_RULESET: GameRuleSet = XAM_BASELINE_V2
+
+const KNOWN_RULESETS: readonly GameRuleSet[] = [XAM_BASELINE_V1, XAM_BASELINE_V2]
 
 export class UnknownRulesetError extends Error {
   constructor(code: unknown, version: unknown) {

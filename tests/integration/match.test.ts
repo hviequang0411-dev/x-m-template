@@ -64,13 +64,17 @@ describe('start-match (T5.3)', () => {
     expect(errorCode(again)).toBe('MATCH_IN_PROGRESS')
   })
 
-  it('needs exactly 4 players', async () => {
+  it('needs at least 2 players; 3 can play, with seats 0..2 and 10 cards each [R01b]', async () => {
     const [host, a, b] = await newPlayers(3)
     const { roomId, code } = okBody(await call<{ roomId: string; code: string }>(host!, 'create-room', {}))
+    const alone = await call(host!, 'start-match', { roomId })
+    expect([alone.status, errorCode(alone)]).toEqual([409, 'NOT_ENOUGH_PLAYERS'])
+    expect(alone.body).toMatchObject({ error: { message: 'Cần ít nhất 2 người chơi để bắt đầu' } })
     okBody(await call(a!, 'join-room', { code }))
     okBody(await call(b!, 'join-room', { code }))
-    const r = await call(host!, 'start-match', { roomId })
-    expect([r.status, errorCode(r)]).toEqual([409, 'NOT_ENOUGH_PLAYERS'])
+    const { state, matchId } = okBody(await call<Started>(host!, 'start-match', { roomId }))
+    expect(state.seats.map((s) => [s.seat, s.cardCount])).toEqual([[0, 10], [1, 10], [2, 10]])
+    expect(await myHand(b!, matchId)).toHaveLength(10)
   })
 
   it('leaving mid-match is refused', async () => {
@@ -148,6 +152,13 @@ describe('play-cards / pass-turn (T5.4)', () => {
     const late = await call(bySeat(players, 0), 'pass-turn', { actionId: randomUUID(), matchId, expectedVersion: state.version })
     expect(errorCode(late)).toBe('MATCH_NOT_ACTIVE')
 
+    // Losers paid out; anyone left under 10 points blocks the next ranked match [R34].
+    const { data: balances } = await admin.from('profiles').select('total_score').in('id', players.map((p) => p.userId))
+    if (balances!.some((b) => b.total_score < 10)) {
+      const blocked = await call(players[0]!, 'start-match', { roomId })
+      expect([blocked.status, errorCode(blocked)]).toEqual([409, 'NOT_ENOUGH_POINTS'])
+      await admin.from('profiles').update({ total_score: 10 }).in('id', players.map((p) => p.userId)).lt('total_score', 10)
+    }
     const next = okBody(await call<Started>(players[0]!, 'start-match', { roomId }))
     expect(next.state.currentSeat).toBe(state.winnerSeat)
   })
