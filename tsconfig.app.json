@@ -21,8 +21,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@engine": ["./supabase/functions/_shared/game-engine/index.ts"],
-      "@engine/*": ["./supabase/functions/_shared/game-engine/*"]
+      "@engine/*": ["./supabase/functions/_shared/game-engine/*"],
+      "@shared/*": ["./supabase/functions/_shared/*"]
     }
   },
-  "include": ["src", "supabase/functions/_shared/game-engine"]
+  "include": ["src", "supabase/functions/_shared"]
 }

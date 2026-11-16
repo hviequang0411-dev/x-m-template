@@ -200,10 +200,22 @@ only for members, and allow `INSERT` (client send) only for Presence on `room:<i
 | `20261116000001_profiles_and_rulesets.sql` | `set_updated_at`, profiles + `handle_new_user` trigger, game_rulesets + immutability trigger, `xam-baseline` v1 seed (approved) | ✅ applied |
 | `20261116000002_rooms.sql` | game_rooms, room_players, `is_room_member`, RLS/grants | ✅ applied |
 | `20261116000003_matches.sql` | `is_valid_card_array`, matches, match_players, player_private_states, game_actions, match_results, `is_match_player`, RLS/grants | ✅ applied |
-| `0004_room_rpcs.sql` | `create_room`, `join_room`, `leave_room` | Day 5 |
-| `0005_game_rpcs.sql` | `start_match`, `apply_game_action`, `finish_match` | Day 5 |
-| `0006_realtime_policies.sql` | `realtime.messages` policies | Day 5 |
+| `20261116000004_room_rpcs.sql` | `notify_room`, `generate_room_code`, `create_room`, `join_room`, `leave_room` (WAITING rooms only; host handoff, close when empty) | ✅ applied |
+| `20261116000005_game_rpcs.sql` | `match_public_state`, `start_match`, `apply_game_action` | ✅ applied |
+| `20261116000006_realtime_policies.sql` | `can_access_topic`, `realtime.messages` policies (receive on `room:`/`match:` for members, Presence insert on `room:`) | ✅ applied |
 
 The room RPCs moved from 0002 to Day 5 so they're written alongside the Edge Functions that call them.
+`finish_match` (abort, R30) moves to Day 6 with `claim-timeout` (T6.3). `apply_game_action` does not write
+`match_results` or scores yet: that is T6.1.
 
-Database tests live in `supabase/tests/database/` (`001_schema_constraints`, 22 assertions; `002_rls_security`, 38 assertions). Run them with `npm run db:test`.
+Notes on the Day 5 RPCs:
+- `start_match` starts at `version = 1` (the DEAL action is `version_after = 1`); every action adds 1.
+- `apply_game_action` checks, in this order under `SELECT … FOR UPDATE`: duplicate `action_id` → `ACTION_ALREADY_PROCESSED`,
+  version → `VERSION_CONFLICT`, status, membership, turn, `p_cards <@ hand` → `CARD_NOT_OWNED`, and that "hand is now empty"
+  agrees with the engine's `FINISHED`/winner (else `INTERNAL_ERROR`). The `state` broadcast goes out after commit and contains
+  only `match_public_state` (card counts, never hands).
+- Error codes, HTTP statuses and Vietnamese messages: `supabase/functions/_shared/errors.ts`.
+
+Database tests live in `supabase/tests/database/` (`001_schema_constraints`, 22 assertions; `002_rls_security`, 38 assertions;
+`003_rpcs`, 28 assertions). Run them with `npm run db:test`. End-to-end checks against the running stack (functions, RLS, Realtime,
+concurrency) are in `tests/integration/`; run them with `npm run test:integration`.

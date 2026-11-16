@@ -156,3 +156,19 @@ Tests: 193 unit tests (66 new).
 Engine error codes (in `state.ts`, messages in `src/features/game/labels.ts`): `INVALID_REQUEST`, `MATCH_NOT_ACTIVE`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `LEADER_CANNOT_PASS`. The master prompt §13 list isn't in the repo, so the names not already in the docs were chosen here; rename in one place if they must match.
 
 Tests: 236 unit tests (43 new).
+
+### 2026-11-16 · Day 5 ✅
+| Task | Status | Notes |
+|------|--------|-------|
+| T5.1 `_shared` helpers + error envelope | ✅ | `errors.ts` (one table of codes → HTTP status → Vietnamese message, `mapDbError`), `http.ts` (CORS, POST-only, envelope, no stack traces), `schemas.ts` (Zod), `auth.ts`, `db.ts`, `rpc.ts`. Unit tests for the error mapping, schemas and handler. `zod`/`supabase-js` resolve through `supabase/functions/deno.json` under Deno and from `node_modules` under Vitest |
+| T5.2 Rooms | ✅ | Migration 0004 + `create-room`, `join-room`, `leave-room`. Integration: 4 users join seats 0..3; 5th → `ROOM_FULL`; rejoin → `ALREADY_IN_ROOM`; host handoff and close on empty (R33) |
+| T5.3 `start-match` | ✅ | Crypto shuffle and deal in the function, validated in `start_match` (4 × handSize distinct valid cards, previous winner leads). Integration: only the host; exactly 4; each player reads only their own hand (RLS); the DEAL log has no cards |
+| T5.4 `apply_game_action` + `play-cards`/`pass-turn` | ✅ | Stale version → `VERSION_CONFLICT`; same `actionId` → idempotent replay (`duplicate: true`); **20 parallel requests on one version → exactly 1 commit** (through the function and directly on the RPC); full match to a winner, next match led by the winner |
+| T5.5 Realtime + pages | ✅ | Migration 0006 policies; RPCs broadcast after commit. Integration: all 4 members receive the state < 1 s, the payload holds no hand, outsiders and malformed topics get `CHANNEL_ERROR`. Waiting Room (`/room/:id`) and Game Table (`/match/:id`) wired with resync on (re)subscribe and tab focus; component tests pass. Browser check (4 accounts on 4 origins): register, create, join by lowercase code, the host's seat list fills in live, start moves all 4 tabs to the table, 40 distinct cards with each tab seeing only its own hand. A full match (27 versions) was then played with one seat by a person in the browser and three by a script through the real functions, while the host tab followed via Realtime only: winner and cóng shown, "Về phòng" returns to the same 4 seats |
+
+Found and fixed while testing:
+- `runAction` read the match row and the hands separately, so under concurrency it could see an old version with a new hand and answer `CARD_NOT_OWNED` instead of `VERSION_CONFLICT` (or instead of an idempotent replay). It now re-checks for its own committed action and for a moved version before reporting an engine error.
+- The local edge runtime sometimes recycles a worker mid-request and answers with a raw 5xx. The client (`src/lib/functions.ts`) and the test helper retry once with the same body, which is safe because actions are idempotent.
+- The local Auth limit of 30 sign-ins per 5 min made repeated integration runs fail; `supabase/config.toml` raises it **for the local stack only**.
+
+Tests: `npm run verify` unit tests, 88 pgTAP assertions (28 new), 16 integration tests (`npm run test:integration`, needs the local stack), stable over 6 consecutive runs.

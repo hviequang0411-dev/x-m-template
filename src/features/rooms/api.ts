@@ -1,3 +1,4 @@
+import { callFunction } from '@/lib/functions'
 import { supabase } from '@/lib/supabase'
 
 export type RoomStatus = 'WAITING' | 'PLAYING' | 'CLOSED'
@@ -26,3 +27,53 @@ export async function fetchMyActiveRoom(userId: string): Promise<ActiveRoom | nu
   if (!data) return null
   return { roomId: data.room.id, code: data.room.code, status: data.room.status, seat: data.seat }
 }
+
+export interface RoomPlayer {
+  seat: number
+  userId: string
+  displayName: string
+}
+
+export interface RoomView {
+  id: string
+  code: string
+  status: RoomStatus
+  hostId: string
+  currentMatchId: string | null
+  players: RoomPlayer[]
+}
+
+interface RoomRow {
+  id: string
+  code: string
+  status: RoomStatus
+  host_id: string
+  current_match_id: string | null
+  players: { seat: number; user_id: string; status: string; profile: { display_name: string } | null }[]
+}
+
+/** The room and its active seats. Null when the caller isn't a member (RLS hides the row). */
+export async function fetchRoom(roomId: string): Promise<RoomView | null> {
+  const { data, error } = await supabase
+    .from('game_rooms')
+    .select('id, code, status, host_id, current_match_id, players:room_players(seat, user_id, status, profile:profiles(display_name))')
+    .eq('id', roomId)
+    .maybeSingle<RoomRow>()
+  if (error) throw new Error('ROOM_LOAD_FAILED')
+  if (!data) return null
+  return {
+    id: data.id,
+    code: data.code,
+    status: data.status,
+    hostId: data.host_id,
+    currentMatchId: data.current_match_id,
+    players: data.players
+      .filter((p) => p.status === 'ACTIVE')
+      .sort((a, b) => a.seat - b.seat)
+      .map((p) => ({ seat: p.seat, userId: p.user_id, displayName: p.profile?.display_name ?? 'Người chơi' })),
+  }
+}
+
+export const createRoom = () => callFunction<{ roomId: string; code: string; seat: number }>('create-room', {})
+export const joinRoom = (code: string) => callFunction<{ roomId: string; code: string; seat: number }>('join-room', { code })
+export const leaveRoom = (roomId: string) => callFunction<{ roomId: string }>('leave-room', { roomId })

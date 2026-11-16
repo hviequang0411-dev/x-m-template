@@ -15,7 +15,8 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:secrets"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:secrets",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",

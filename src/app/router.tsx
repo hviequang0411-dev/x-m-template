@@ -5,6 +5,8 @@ import { AppLayout } from '@/pages/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { LobbyPage } from '@/pages/LobbyPage'
+import { WaitingRoomPage } from '@/pages/WaitingRoomPage'
+import { GameTablePage } from '@/pages/GameTablePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 // Dev-only previews. `import.meta.env.DEV` is false in production builds, so this code is dropped.
@@ -36,7 +38,16 @@ export const router = createBrowserRouter([
   },
   {
     element: <RequireAuth />,
-    children: [{ element: <AppLayout />, children: [{ path: '/', element: <LobbyPage /> }] }],
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          { path: '/', element: <LobbyPage /> },
+          { path: '/room/:roomId', element: <WaitingRoomPage /> },
+          { path: '/match/:matchId', element: <GameTablePage /> },
+        ],
+      },
+    ],
   },
   ...devRoutes,
   { path: '*', element: <NotFoundPage /> },
