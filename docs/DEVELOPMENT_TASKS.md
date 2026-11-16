@@ -133,3 +133,14 @@ Known limitations: the Studio image is corrupted locally (excluded; not needed);
 | T2.4 `<PlayingCard>`, `<Hand>` | ✅ | Selection in Zustand (`features/game/selectionStore`), sorted by rank, Vietnamese labels for screen readers (e.g. "10 cơ"), `aria-pressed`, disabled state, drops selected cards that leave the hand. Dev-only preview at `/dev/cards` (not in the production bundle, checked) |
 
 Tests: 127 unit tests (102 new). Browser-checked on `/dev/cards`: select/deselect, lock, remove, re-deal, fits a 375 px screen without horizontal scroll.
+
+### 2026-11-16 · Day 3 ✅
+| Task | Status | Notes |
+|------|--------|-------|
+| T3.1 CombinationValidator | ✅ | `classify(cards, ruleset)` in `combination.ts`. Table-driven tests for all 5 types, A-2-3 (lowest) and Q-K-A (highest), 2-3-4, 10-card straights; rejects K-A-2, Q-K-A-2, K-A-2-3, gaps, 11-card runs, consecutive pairs, empty and duplicate sets. Low straights are returned in A-2-3… display order |
+| T3.2 CombinationComparator | ✅ | `canBeat(next, current, ruleset)` is the only comparison code. Straight key = top card with A = 1 in low runs. Four of a kind beats a single 2 only (not a pair of 2s), and a higher four beats a lower one |
+| T3.3 Property tests | ✅ | Over ~470 random and all 68 possible straights plus every set: irreflexive, asymmetric, never crosses type/size except the R09 bomb, transitive within a type+size, independent of card order |
+
+Note: `canBeat` is intentionally **not** transitive across types (four 3s beat a 2 and a 2 beats an A, but four 3s don't beat an A). A test documents it. No new dependency: property tests use the engine's seeded RNG.
+
+Tests: 193 unit tests (66 new).

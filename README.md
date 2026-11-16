@@ -31,4 +31,4 @@ npm run dev
 - Clients can read through RLS; every write to game state goes through Edge Functions → SECURITY DEFINER RPCs.
 
 ## Status
-Day 2 of 7 complete. See the [progress log](docs/DEVELOPMENT_TASKS.md#progress-log).
+Day 3 of 7 complete. See the [progress log](docs/DEVELOPMENT_TASKS.md#progress-log).
