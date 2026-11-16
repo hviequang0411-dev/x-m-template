@@ -172,3 +172,22 @@ Found and fixed while testing:
 - The local Auth limit of 30 sign-ins per 5 min made repeated integration runs fail; `supabase/config.toml` raises it **for the local stack only**.
 
 Tests: `npm run verify` unit tests, 88 pgTAP assertions (28 new), 16 integration tests (`npm run test:integration`, needs the local stack), stable over 6 consecutive runs.
+
+### 2026-11-16 · Day 6 ✅
+| Task | Status | Notes |
+|------|--------|-------|
+| T6.1 ScoreCalculator + persisted results | ✅ | `calculateScores` (R17–R20): 1 point per card, cóng = flat 15, thối 2 / tứ quý recorded but 0 in v1, zero-sum. Passed to `apply_game_action`, re-verified in SQL and written once to `match_results` and `profiles`. Unit tests per rule; integration: results and profile totals match, a late action writes nothing |
+| T6.2 Result, Profile, History | ✅ | Results table on the finished Game Table (persisted rows only, remaining hands revealed), `/profile` (stats, rename), `/history` (last 50). Browser-checked with a real match: winner +45, three cóng −15, history entry and profile totals |
+| T6.3 `claim-timeout` + `finish-match` | ✅ | Any open client claims an expired turn (countdown + jittered auto-claim); the leader auto-plays its lowest single, others auto-pass. Early claim → `TURN_NOT_EXPIRED`; 12 parallel claims → 1 commit. Abort: host only, after 5 min without a move (`MATCH_NOT_STALLED`), no results. Browser-checked: 3 consecutive turns timed out about 32 s apart and were logged as `TIMEOUT_PLAY`/`TIMEOUT_PASS` |
+| T6.4 Reconnect + connection badge | ✅ | `useTopic` reports connecting/connected/reconnecting/offline and resyncs on (re)subscribe, tab focus and `online`; presence dots per seat; "Báo 1" badge (R24 display only). Browser-checked by stopping the local Realtime container mid-match: badge → "Đang kết nối lại…", the match finished meanwhile, and on reconnect the page refetched in the same tick and showed the results |
+| T6.5 pgTAP security suite | ✅ | `004_security_suite` (62 assertions). 150 assertions in total |
+
+Found and fixed while testing:
+- **Security bug (0008):** the 0007 results check let a payload without the cóng flag (or without other fields) through because of SQL NULL comparisons. Found by the new pgTAP suite; fixed with `IS DISTINCT FROM`; regression tests added.
+- **Broken queries:** `matches` ↔ `game_rooms` has two foreign keys, so the new embeds returned PostgREST 300 and the Game Table showed an error. Component tests mock the API, so they missed it. All select strings now live in `src/features/queries.ts`, and `tests/integration/frontend-queries.test.ts` runs each one as a real player.
+
+Not done (documented limitations):
+- **R29 forfeit on leaving mid-match** is not implemented: leaving during a match is refused (`MATCH_IN_PROGRESS`); an absent player is auto-passed by the turn timeout instead.
+- **R30 abort by agreement of all players** is not implemented; only the 5-minute stall abort exists.
+
+Tests: 301 unit tests, 150 pgTAP assertions, 23 integration tests.

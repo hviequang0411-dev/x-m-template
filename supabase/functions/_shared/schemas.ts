@@ -30,5 +30,9 @@ export const playCardsSchema = z
 
 export const passTurnSchema = z.object(actionBase).strict()
 
+export const claimTimeoutSchema = z.object(actionBase).strict()
+
+export const matchIdSchema = z.object({ matchId: z.uuid() }).strict()
+
 export type PlayCardsBody = z.infer<typeof playCardsSchema>
 export type PassTurnBody = z.infer<typeof passTurnSchema>

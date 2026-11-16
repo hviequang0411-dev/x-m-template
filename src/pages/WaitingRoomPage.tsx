@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConnectionBadge } from '@/components/ConnectionBadge'
 import { useAuthStore } from '@/features/auth/store'
 import { startMatch } from '@/features/match/api'
 import { fetchRoom, leaveRoom, type RoomView } from '@/features/rooms/api'
@@ -42,13 +43,14 @@ export function WaitingRoomPage() {
     }
   }, [fetchState, apply])
 
-  useTopic(
+  const { status: connection, online } = useTopic(
     roomId ? `room:${roomId}` : null,
     (event, payload) => {
       if (event === 'match_started' && typeof payload.matchId === 'string') navigate(`/match/${payload.matchId}`)
       else void refresh()
     },
     () => void refresh(),
+    { presenceKey: userId },
   )
 
   async function run(kind: 'start' | 'leave') {
@@ -110,7 +112,10 @@ export function WaitingRoomPage() {
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Phòng chờ</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Phòng chờ</CardTitle>
+            <ConnectionBadge status={connection} />
+          </div>
           <CardDescription>Gửi mã phòng cho bạn bè. Cần đủ 4 người để bắt đầu.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
@@ -134,6 +139,13 @@ export function WaitingRoomPage() {
           >
             <span>
               <span className="mr-2 text-sm text-slate-500">Ghế {seat + 1}</span>
+              {p && (
+                <span
+                  aria-label={online.has(p.userId) ? 'Đang online' : 'Mất kết nối'}
+                  title={online.has(p.userId) ? 'Đang online' : 'Mất kết nối'}
+                  className={cn('mr-1.5 inline-block size-2 rounded-full', online.has(p.userId) ? 'bg-emerald-500' : 'bg-slate-300')}
+                />
+              )}
               <span className="font-medium">{p ? p.displayName : 'Trống'}</span>
             </span>
             <span className="text-xs text-slate-500">

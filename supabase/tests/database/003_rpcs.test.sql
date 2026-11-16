@@ -17,10 +17,10 @@ select ok(not has_function_privilege('authenticated', 'public.create_room(uuid, 
 select ok(not has_function_privilege('authenticated', 'public.join_room(uuid, text)', 'EXECUTE'), 'authenticated cannot execute join_room');
 select ok(not has_function_privilege('authenticated', 'public.leave_room(uuid, uuid)', 'EXECUTE'), 'authenticated cannot execute leave_room');
 select ok(not has_function_privilege('authenticated', 'public.start_match(uuid, uuid, jsonb, smallint)', 'EXECUTE'), 'authenticated cannot execute start_match');
-select ok(not has_function_privilege('authenticated', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb)', 'EXECUTE'), 'authenticated cannot execute apply_game_action');
-select ok(not has_function_privilege('anon', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb)', 'EXECUTE'), 'anon cannot execute apply_game_action');
+select ok(not has_function_privilege('authenticated', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb, jsonb)', 'EXECUTE'), 'authenticated cannot execute apply_game_action');
+select ok(not has_function_privilege('anon', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb, jsonb)', 'EXECUTE'), 'anon cannot execute apply_game_action');
 select ok(not has_function_privilege('authenticated', 'public.match_public_state(uuid)', 'EXECUTE'), 'authenticated cannot execute match_public_state');
-select ok(has_function_privilege('service_role', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb)', 'EXECUTE'), 'service_role can execute apply_game_action');
+select ok(has_function_privilege('service_role', 'public.apply_game_action(uuid, uuid, uuid, bigint, text, text[], jsonb, jsonb)', 'EXECUTE'), 'service_role can execute apply_game_action');
 
 -- Rooms --------------------------------------------------------------------------
 insert into ids select 'room', (public.create_room('d0000001-0000-0000-0000-000000000000') ->> 'roomId')::uuid;

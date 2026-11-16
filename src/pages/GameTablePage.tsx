@@ -2,43 +2,78 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { classify, parseCards, seatAfter, XAM_BASELINE_V1, type CardCode } from '@engine'
 import { Button } from '@/components/ui/button'
+import { ConnectionBadge } from '@/components/ConnectionBadge'
 import { Hand } from '@/components/cards/Hand'
 import { PlayingCard } from '@/components/cards/PlayingCard'
 import { useAuthStore } from '@/features/auth/store'
 import { useSelectionStore } from '@/features/game/selectionStore'
 import { COMBINATION_LABEL } from '@/features/game/labels'
-import { fetchMatch, fetchMyHand, passTurn, playCards, type MatchView, type SeatView } from '@/features/match/api'
+import {
+  abortMatch,
+  claimTimeout,
+  fetchMatch,
+  fetchMyHand,
+  fetchResults,
+  passTurn,
+  playCards,
+  type MatchView,
+  type ResultView,
+  type SeatView,
+} from '@/features/match/api'
 import { ApiCallError } from '@/lib/functions'
 import { useTopic } from '@/lib/realtime'
 import { cn } from '@/lib/utils'
 
 const R = XAM_BASELINE_V1
+/** Extra wait after the deadline before claiming, plus random jitter so 4 clients don't all race. */
+const CLAIM_GRACE_MS = 1000
+const CLAIM_JITTER_MS = 1500
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'gone' } | { state: 'ready'; match: MatchView }
+
+/** Whole seconds left until `deadline`, ticking every 250 ms. Null without a deadline. */
+function useSecondsLeft(deadline: string | null): number | null {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!deadline) return
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [deadline])
+  if (!deadline) return null
+  return Math.max(0, Math.ceil((Date.parse(deadline) - now) / 1000))
+}
 
 export function GameTablePage() {
   const { matchId = '' } = useParams()
   const userId = useAuthStore((s) => s.session?.user.id)
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const [hand, setHand] = useState<CardCode[]>([])
+  const [results, setResults] = useState<ResultView[] | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmAbort, setConfirmAbort] = useState(false)
   const selected = useSelectionStore((s) => s.selected)
   const clearSelection = useSelectionStore((s) => s.clear)
   const versionRef = useRef(0)
 
   /** Server state is replaced wholesale; the hand is re-read on every new version (never broadcast). */
   const fetchState = useCallback(
-    () => Promise.all([fetchMatch(matchId), fetchMyHand(matchId)]).catch(() => 'error' as const),
+    () =>
+      Promise.all([fetchMatch(matchId), fetchMyHand(matchId)])
+        .then(async ([match, myHand]) => {
+          const res = match && match.status === 'FINISHED' ? await fetchResults(matchId) : null
+          return { match, myHand, res }
+        })
+        .catch(() => 'error' as const),
     [matchId],
   )
   const apply = useCallback((result: Awaited<ReturnType<typeof fetchState>>) => {
     if (result === 'error') return setLoad({ state: 'error' })
-    const [match, myHand] = result
-    if (!match) return setLoad({ state: 'gone' })
-    versionRef.current = match.version
-    setLoad({ state: 'ready', match })
-    setHand(myHand)
+    if (!result.match) return setLoad({ state: 'gone' })
+    versionRef.current = result.match.version
+    setLoad({ state: 'ready', match: result.match })
+    setHand(result.myHand)
+    setResults(result.res)
   }, [])
   const refresh = useCallback(() => fetchState().then(apply), [fetchState, apply])
 
@@ -53,7 +88,7 @@ export function GameTablePage() {
     }
   }, [fetchState, apply, clearSelection])
 
-  useTopic(
+  const { status: connection } = useTopic(
     matchId ? `match:${matchId}` : null,
     (event, payload) => {
       if (event === 'state' && typeof payload.version === 'number' && payload.version > versionRef.current) void refresh()
@@ -61,6 +96,26 @@ export function GameTablePage() {
     () => void refresh(),
   )
 
+  const match = load.state === 'ready' ? load.match : null
+  // Presence on the room topic: who has the game open (display only, R28).
+  const { online } = useTopic(match ? `room:${match.roomId}` : null, () => {}, () => {}, { presenceKey: userId })
+
+  // Turn timeout [R27]: once the deadline passes, any open client claims it. The server decides.
+  const playing = match?.status === 'PLAYING'
+  const deadline = playing ? match.turnDeadline : null
+  const version = match?.version
+  useEffect(() => {
+    if (!deadline || version === undefined) return
+    const wait = Date.parse(deadline) - Date.now() + CLAIM_GRACE_MS + Math.random() * CLAIM_JITTER_MS
+    const id = setTimeout(() => {
+      void claimTimeout(matchId, version)
+        .catch(() => {}) // VERSION_CONFLICT / TURN_NOT_EXPIRED: someone else moved or claimed first
+        .then(refresh)
+    }, Math.max(0, wait))
+    return () => clearTimeout(id)
+  }, [deadline, version, matchId, refresh])
+
+  const secondsLeft = useSecondsLeft(deadline)
   const hint = useMemo(() => (selected.length ? classify(parseCards(selected), R) : null), [selected])
 
   if (load.state === 'loading')
@@ -75,7 +130,7 @@ export function GameTablePage() {
         Không tải được bàn chơi. Vui lòng tải lại trang.
       </p>
     )
-  if (load.state === 'gone')
+  if (load.state === 'gone' || !match)
     return (
       <div className="grid gap-3">
         <p>Không tìm thấy ván này, hoặc bạn không tham gia ván.</p>
@@ -85,39 +140,52 @@ export function GameTablePage() {
       </div>
     )
 
-  const { match } = load
   const me = match.seats.find((s) => s.userId === userId)
   const finished = match.status !== 'PLAYING'
   const myTurn = !finished && me?.seat === match.currentSeat
   const leading = match.currentTrick === null
+  const isHost = match.hostId === userId
   // Opponents in play order after me (CCW).
   const order: SeatView[] = []
   if (me) for (let s = seatAfter(me.seat, R), i = 0; i < 3; s = seatAfter(s, R), i++) order.push(match.seats[s]!)
 
-  async function act(kind: 'play' | 'pass') {
+  async function act(kind: 'play' | 'pass' | 'abort') {
+    if (!match) return
     setPending(true)
     setError(null)
     try {
       if (kind === 'play') await playCards(match.matchId, match.version, selected)
-      else await passTurn(match.matchId, match.version)
-      clearSelection()
+      else if (kind === 'pass') await passTurn(match.matchId, match.version)
+      else await abortMatch(match.matchId)
+      if (kind !== 'abort') clearSelection()
     } catch (e) {
       // VERSION_CONFLICT: someone else moved first. Refetch silently and keep the selection (ARCHITECTURE §6).
       if (!(e instanceof ApiCallError && e.code === 'VERSION_CONFLICT'))
         setError(e instanceof ApiCallError ? e.message : 'Có lỗi xảy ra, vui lòng thử lại')
     } finally {
+      setConfirmAbort(false)
       await refresh()
       setPending(false)
     }
   }
 
   const winner = match.winnerSeat !== null ? match.seats[match.winnerSeat] : null
+  const turnName = match.seats[match.currentSeat]?.displayName
 
   return (
     <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ConnectionBadge status={connection} />
+        {!finished && secondsLeft !== null && (
+          <span className={cn('text-sm tabular-nums', secondsLeft <= 5 ? 'font-semibold text-red-600' : 'text-slate-600')}>
+            {myTurn ? 'Bạn' : turnName} còn {secondsLeft}s
+          </span>
+        )}
+      </div>
+
       <ol className="grid grid-cols-3 gap-2" aria-label="Đối thủ">
         {order.map((s) => (
-          <SeatBadge key={s.seat} seat={s} match={match} />
+          <SeatBadge key={s.seat} seat={s} match={match} online={online.has(s.userId)} />
         ))}
       </ol>
 
@@ -134,19 +202,22 @@ export function GameTablePage() {
             </div>
           </div>
         ) : (
-          !finished && (
-            <p className="text-center text-white/80">
-              Vòng mới · {match.seats[match.currentSeat]?.displayName} đánh trước
-            </p>
-          )
+          !finished && <p className="text-center text-white/80">Vòng mới · {turnName} đánh trước</p>
         )}
       </section>
 
       {finished && (
-        <section aria-label="Kết quả" className="grid gap-3 rounded-xl border border-gold bg-white p-4 text-center">
-          <p className="text-xl font-semibold" role="status">
-            {winner ? (winner.userId === userId ? 'Bạn thắng ván này! 🏆' : `${winner.displayName} thắng ván này`) : 'Ván đã kết thúc'}
+        <section aria-label="Kết quả" className="grid gap-4 rounded-xl border border-gold bg-white p-4">
+          <p className="text-center text-xl font-semibold" role="status">
+            {match.status === 'ABORTED'
+              ? 'Ván đã bị huỷ (không tính điểm)'
+              : winner
+                ? winner.userId === userId
+                  ? 'Bạn thắng ván này! 🏆'
+                  : `${winner.displayName} thắng ván này`
+                : 'Ván đã kết thúc'}
           </p>
+          {results && results.length > 0 && <ResultsTable results={results} userId={userId} />}
           <Button asChild className="mx-auto w-fit">
             <Link to={`/room/${match.roomId}`}>Về phòng</Link>
           </Button>
@@ -157,7 +228,7 @@ export function GameTablePage() {
         <section aria-label="Bài của bạn" className="grid gap-3">
           <div className="flex items-center justify-between text-sm">
             <span className={cn('font-medium', myTurn && 'text-felt')}>
-              {myTurn ? 'Đến lượt bạn' : `Chờ ${match.seats[match.currentSeat]?.displayName}…`}
+              {myTurn ? 'Đến lượt bạn' : `Chờ ${turnName}…`}
             </span>
             <span className="text-slate-500">{hand.length} lá</span>
           </div>
@@ -180,6 +251,22 @@ export function GameTablePage() {
             <Button variant="outline" disabled={!myTurn || pending || leading} onClick={() => void act('pass')}>
               Bỏ lượt
             </Button>
+            {isHost &&
+              (confirmAbort ? (
+                <span className="flex flex-wrap items-center gap-2 text-sm">
+                  Huỷ ván, không tính điểm?
+                  <Button variant="destructive" size="sm" disabled={pending} onClick={() => void act('abort')}>
+                    Huỷ ván
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmAbort(false)}>
+                    Không
+                  </Button>
+                </span>
+              ) : (
+                <Button variant="ghost" className="ml-auto text-slate-500" onClick={() => setConfirmAbort(true)}>
+                  Huỷ ván…
+                </Button>
+              ))}
           </div>
           {error && (
             <p role="alert" className="text-sm text-red-600">
@@ -192,7 +279,7 @@ export function GameTablePage() {
   )
 }
 
-function SeatBadge({ seat, match }: { seat: SeatView; match: MatchView }) {
+function SeatBadge({ seat, match, online }: { seat: SeatView; match: MatchView; online: boolean }) {
   const isTurn = match.status === 'PLAYING' && match.currentSeat === seat.seat
   const passed = match.passedSeats.includes(seat.seat)
   return (
@@ -204,14 +291,66 @@ function SeatBadge({ seat, match }: { seat: SeatView; match: MatchView }) {
         passed && 'opacity-60',
       )}
     >
-      <p className="truncate font-medium">
-        {seat.displayName}
+      <p className="flex items-center gap-1.5 truncate font-medium">
+        <span
+          aria-label={online ? 'Đang online' : 'Mất kết nối'}
+          title={online ? 'Đang online' : 'Mất kết nối'}
+          className={cn('size-2 shrink-0 rounded-full', online ? 'bg-emerald-500' : 'bg-slate-300')}
+        />
+        <span className="truncate">{seat.displayName}</span>
         {match.winnerSeat === seat.seat && ' 🏆'}
       </p>
-      <p className="text-slate-600">{seat.cardCount} lá</p>
+      <p className="text-slate-600">
+        {seat.cardCount} lá{seat.cardCount === 1 && match.status === 'PLAYING' && <span className="ml-1 font-semibold text-red-600">· Báo 1</span>}
+      </p>
       <p className="text-xs text-slate-500">
         {[isTurn && 'Đang đánh', passed && 'Đã bỏ', !seat.hasPlayed && 'Chưa đánh'].filter(Boolean).join(' · ') || ' '}
       </p>
     </li>
+  )
+}
+
+/** Persisted results only: the client never computes scores. */
+function ResultsTable({ results, userId }: { results: ResultView[]; userId: string | undefined }) {
+  return (
+    <table className="w-full text-sm">
+      <caption className="sr-only">Kết quả ván</caption>
+      <thead>
+        <tr className="border-b text-left text-slate-500">
+          <th className="py-1 font-medium">Người chơi</th>
+          <th className="py-1 font-medium">Bài còn lại</th>
+          <th className="py-1 text-right font-medium">Điểm</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...results]
+          .sort((a, b) => b.scoreDelta - a.scoreDelta)
+          .map((r) => (
+            <tr key={r.seat} className={cn('border-b last:border-0', r.userId === userId && 'bg-amber-50/60')}>
+              <td className="py-2 align-top">
+                {r.displayName}
+                {r.isWinner && ' 🏆'}
+                {r.penalties.cong && <span className="ml-1 rounded bg-red-50 px-1 text-xs text-red-700">Cóng</span>}
+              </td>
+              <td className="py-2">
+                {r.remainingCards === 0 ? (
+                  '—'
+                ) : (
+                  <span className="flex flex-wrap gap-0.5" aria-label={`${r.remainingCards} lá: ${r.remainingHand.join(' ')}`}>
+                    {r.remainingHand.map((c) => (
+                      <span key={c} className="font-mono text-xs">
+                        {c}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </td>
+              <td className={cn('py-2 text-right font-semibold tabular-nums', r.scoreDelta > 0 ? 'text-emerald-700' : 'text-red-700')}>
+                {r.scoreDelta > 0 ? `+${r.scoreDelta}` : r.scoreDelta}
+              </td>
+            </tr>
+          ))}
+      </tbody>
+    </table>
   )
 }

@@ -12,6 +12,7 @@ export default defineConfig({
     alias: {
       '@engine': r('./supabase/functions/_shared/game-engine'),
       '@shared': r('./supabase/functions/_shared'),
+      '@': r('./src'),
     },
   },
   test: {

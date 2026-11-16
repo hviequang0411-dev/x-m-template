@@ -1,6 +1,7 @@
 import type { CardCode, Combination } from '@engine'
 import { callFunction } from '@/lib/functions'
 import { supabase } from '@/lib/supabase'
+import { HAND_SELECT, HISTORY_SELECT, MATCH_SELECT, RESULTS_SELECT } from '@/features/queries'
 
 export interface SeatView {
   seat: number
@@ -15,6 +16,8 @@ export interface SeatView {
 export interface MatchView {
   matchId: string
   roomId: string
+  hostId: string | null
+  turnDeadline: string | null
   version: number
   status: 'PLAYING' | 'FINISHED' | 'ABORTED'
   currentSeat: number
@@ -28,6 +31,8 @@ export interface MatchView {
 interface MatchRow {
   id: string
   room_id: string
+  turn_deadline: string | null
+  room: { host_id: string } | null
   version: number
   status: MatchView['status']
   current_seat: number
@@ -49,10 +54,7 @@ interface MatchRow {
 export async function fetchMatch(matchId: string): Promise<MatchView | null> {
   const { data, error } = await supabase
     .from('matches')
-    .select(
-      'id, room_id, version, status, current_seat, lead_seat, current_trick, passed_seats, winner_seat, ' +
-        'players:match_players(seat, user_id, card_count, has_played, status, profile:profiles(display_name))',
-    )
+    .select(MATCH_SELECT)
     .eq('id', matchId)
     .maybeSingle<MatchRow>()
   if (error) throw new Error('MATCH_LOAD_FAILED')
@@ -60,6 +62,8 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
   return {
     matchId: data.id,
     roomId: data.room_id,
+    hostId: data.room?.host_id ?? null,
+    turnDeadline: data.turn_deadline,
     version: data.version,
     status: data.status,
     currentSeat: data.current_seat,
@@ -82,7 +86,7 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
 
 /** The caller's own hand (RLS: only your own row is readable). */
 export async function fetchMyHand(matchId: string): Promise<CardCode[]> {
-  const { data, error } = await supabase.from('player_private_states').select('hand').eq('match_id', matchId).maybeSingle()
+  const { data, error } = await supabase.from('player_private_states').select(HAND_SELECT).eq('match_id', matchId).maybeSingle()
   if (error) throw new Error('HAND_LOAD_FAILED')
   return (data?.hand as CardCode[] | undefined) ?? []
 }
@@ -94,3 +98,82 @@ export const playCards = (matchId: string, expectedVersion: number, cards: CardC
 
 export const passTurn = (matchId: string, expectedVersion: number) =>
   callFunction<{ version: number }>('pass-turn', { actionId: crypto.randomUUID(), matchId, expectedVersion })
+
+export const claimTimeout = (matchId: string, expectedVersion: number) =>
+  callFunction<{ version: number }>('claim-timeout', { actionId: crypto.randomUUID(), matchId, expectedVersion })
+
+export const abortMatch = (matchId: string) => callFunction<{ version: number }>('finish-match', { matchId })
+
+export interface ResultView {
+  seat: number
+  userId: string
+  displayName: string
+  isWinner: boolean
+  remainingCards: number
+  remainingHand: CardCode[]
+  scoreDelta: number
+  penalties: { cong?: boolean; thoi2?: number; thoiTuQuy?: string[] }
+}
+
+/** The results persisted by the server at match end (RLS: seated players). Never computed here. */
+export async function fetchResults(matchId: string): Promise<ResultView[]> {
+  const { data, error } = await supabase
+    .from('match_results')
+    .select(RESULTS_SELECT)
+    .eq('match_id', matchId)
+    .order('seat')
+  if (error) throw new Error('RESULTS_LOAD_FAILED')
+  return (data ?? []).map((r) => {
+    const row = r as unknown as {
+      seat: number; user_id: string; is_winner: boolean; remaining_cards: number; remaining_hand: CardCode[]
+      score_delta: number; penalties: ResultView['penalties']; profile: { display_name: string } | null
+    }
+    return {
+      seat: row.seat,
+      userId: row.user_id,
+      displayName: row.profile?.display_name ?? 'Người chơi',
+      isWinner: row.is_winner,
+      remainingCards: row.remaining_cards,
+      remainingHand: row.remaining_hand,
+      scoreDelta: row.score_delta,
+      penalties: row.penalties ?? {},
+    }
+  })
+}
+
+export interface HistoryEntry {
+  matchId: string
+  finishedAt: string | null
+  roomCode: string | null
+  isWinner: boolean
+  remainingCards: number
+  scoreDelta: number
+  cong: boolean
+}
+
+/** The caller's last 50 results, newest first. */
+export async function fetchMyHistory(userId: string): Promise<HistoryEntry[]> {
+  const { data, error } = await supabase
+    .from('match_results')
+    .select(HISTORY_SELECT)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) throw new Error('HISTORY_LOAD_FAILED')
+  return (data ?? []).map((r) => {
+    const row = r as unknown as {
+      match_id: string; is_winner: boolean; remaining_cards: number; score_delta: number
+      penalties: { cong?: boolean } | null; created_at: string
+      match: { finished_at: string | null; room: { code: string } | null } | null
+    }
+    return {
+      matchId: row.match_id,
+      finishedAt: row.match?.finished_at ?? row.created_at,
+      roomCode: row.match?.room?.code ?? null,
+      isWinner: row.is_winner,
+      remainingCards: row.remaining_cards,
+      scoreDelta: row.score_delta,
+      cong: row.penalties?.cong === true,
+    }
+  })
+}

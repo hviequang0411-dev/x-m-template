@@ -451,3 +451,11 @@ import_map = "./functions/deno.json"
 [functions.pass-turn]
 verify_jwt = true
 import_map = "./functions/deno.json"
+
+[functions.claim-timeout]
+verify_jwt = true
+import_map = "./functions/deno.json"
+
+[functions.finish-match]
+verify_jwt = true
+import_map = "./functions/deno.json"

@@ -7,6 +7,8 @@ import { RegisterPage } from '@/pages/RegisterPage'
 import { LobbyPage } from '@/pages/LobbyPage'
 import { WaitingRoomPage } from '@/pages/WaitingRoomPage'
 import { GameTablePage } from '@/pages/GameTablePage'
+import { ProfilePage } from '@/pages/ProfilePage'
+import { HistoryPage } from '@/pages/HistoryPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 // Dev-only previews. `import.meta.env.DEV` is false in production builds, so this code is dropped.
@@ -45,6 +47,8 @@ export const router = createBrowserRouter([
           { path: '/', element: <LobbyPage /> },
           { path: '/room/:roomId', element: <WaitingRoomPage /> },
           { path: '/match/:matchId', element: <GameTablePage /> },
+          { path: '/profile', element: <ProfilePage /> },
+          { path: '/history', element: <HistoryPage /> },
         ],
       },
     ],

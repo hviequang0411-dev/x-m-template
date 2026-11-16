@@ -1,5 +1,6 @@
 import { callFunction } from '@/lib/functions'
 import { supabase } from '@/lib/supabase'
+import { ACTIVE_ROOM_SELECT, ROOM_SELECT } from '@/features/queries'
 
 export type RoomStatus = 'WAITING' | 'PLAYING' | 'CLOSED'
 
@@ -19,7 +20,7 @@ interface ActiveRoomRow {
 export async function fetchMyActiveRoom(userId: string): Promise<ActiveRoom | null> {
   const { data, error } = await supabase
     .from('room_players')
-    .select('seat, room:game_rooms!inner(id, code, status)')
+    .select(ACTIVE_ROOM_SELECT)
     .eq('user_id', userId)
     .eq('status', 'ACTIVE')
     .maybeSingle<ActiveRoomRow>()
@@ -56,7 +57,7 @@ interface RoomRow {
 export async function fetchRoom(roomId: string): Promise<RoomView | null> {
   const { data, error } = await supabase
     .from('game_rooms')
-    .select('id, code, status, host_id, current_match_id, players:room_players(seat, user_id, status, profile:profiles(display_name))')
+    .select(ROOM_SELECT)
     .eq('id', roomId)
     .maybeSingle<RoomRow>()
   if (error) throw new Error('ROOM_LOAD_FAILED')

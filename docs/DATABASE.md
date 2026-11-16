@@ -203,10 +203,24 @@ only for members, and allow `INSERT` (client send) only for Presence on `room:<i
 | `20261116000004_room_rpcs.sql` | `notify_room`, `generate_room_code`, `create_room`, `join_room`, `leave_room` (WAITING rooms only; host handoff, close when empty) | ✅ applied |
 | `20261116000005_game_rpcs.sql` | `match_public_state`, `start_match`, `apply_game_action` | ✅ applied |
 | `20261116000006_realtime_policies.sql` | `can_access_topic`, `realtime.messages` policies (receive on `room:`/`match:` for members, Presence insert on `room:`) | ✅ applied |
+| `20261116000007_results_timeout_abort.sql` | `apply_game_action` v2 (TIMEOUT_PASS/TIMEOUT_PLAY claims, `p_results` verified and written to `match_results` + `profiles` once), `finish_match` (abort) | ✅ applied |
+| `20261116000008_null_safe_result_checks.sql` | `apply_game_action`: NULL-safe result checks (see below) | ✅ applied |
 
 The room RPCs moved from 0002 to Day 5 so they're written alongside the Edge Functions that call them.
-`finish_match` (abort, R30) moves to Day 6 with `claim-timeout` (T6.3). `apply_game_action` does not write
-`match_results` or scores yet: that is T6.1.
+
+Notes on the Day 6 RPCs:
+- **Scores** are computed by the engine's `calculateScores` and passed as `p_results`; the RPC re-derives what it can
+  (winner, remaining hand = stored hand, loser pays 15 if `has_played = false` else 1 × cards, cóng flag, sum = 0) and refuses
+  anything else with `INTERNAL_ERROR`. Results are written inside the same locked transaction that sets `FINISHED`, so they are
+  persisted exactly once.
+- **0008 fixes a bug found by `004_security_suite`:** in 0007, checks like `(penalties->>'cong') = 'true' <> …` evaluate to NULL
+  when a key is missing, and `IF NULL` does not raise, so a payload without the cóng flag (or without `isWinner`, `remainingCards`,
+  `scoreDelta`, or a FINISHED state without a winner) was accepted. All checks now use `IS DISTINCT FROM` and require each field
+  with the right JSON type.
+- **Timeout claims** (R27): any seated player may send `TIMEOUT_*` once `turn_deadline < now()` (database clock); the action is
+  logged for the seat whose turn it was. Early claims → `TURN_NOT_EXPIRED`.
+- **Abort** (R30): host only, only when the last action is older than 5 minutes (`MATCH_NOT_STALLED` otherwise); status `ABORTED`,
+  no results, room back to `WAITING`. Abort by agreement of all players is not implemented.
 
 Notes on the Day 5 RPCs:
 - `start_match` starts at `version = 1` (the DEAL action is `version_after = 1`); every action adds 1.
@@ -217,5 +231,6 @@ Notes on the Day 5 RPCs:
 - Error codes, HTTP statuses and Vietnamese messages: `supabase/functions/_shared/errors.ts`.
 
 Database tests live in `supabase/tests/database/` (`001_schema_constraints`, 22 assertions; `002_rls_security`, 38 assertions;
-`003_rpcs`, 28 assertions). Run them with `npm run db:test`. End-to-end checks against the running stack (functions, RLS, Realtime,
+`003_rpcs`, 28 assertions; `004_security_suite`, 62 assertions: every table × INSERT/UPDATE/DELETE closed to clients, every RPC
+service-role only, score columns not writable, results verification, timeout, abort). Run them with `npm run db:test`. End-to-end checks against the running stack (functions, RLS, Realtime,
 concurrency) are in `tests/integration/`; run them with `npm run test:integration`.

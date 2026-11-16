@@ -20,6 +20,7 @@ export const API_ERRORS = {
   // matches
   MATCH_NOT_FOUND: { status: 404, message: 'Không tìm thấy ván' },
   MATCH_NOT_ACTIVE: { status: 409, message: 'Ván đã kết thúc' },
+  MATCH_NOT_STALLED: { status: 409, message: 'Chỉ huỷ được ván khi không ai đánh trong 5 phút' },
   VERSION_CONFLICT: { status: 409, message: 'Bàn chơi vừa thay đổi, đang tải lại' },
   ACTION_ALREADY_PROCESSED: { status: 409, message: 'Nước đi này đã được xử lý' },
   NOT_YOUR_TURN: { status: 409, message: 'Chưa đến lượt bạn' },
@@ -27,7 +28,6 @@ export const API_ERRORS = {
   CARD_NOT_OWNED: { status: 400, message: 'Bạn không có lá bài này' },
   INVALID_COMBINATION: { status: 400, message: 'Các lá đã chọn không tạo thành bộ hợp lệ' },
   CANNOT_BEAT_CURRENT_PLAY: { status: 409, message: 'Bộ này không chặn được bài trên bàn' },
-  // later days
   TURN_NOT_EXPIRED: { status: 409, message: 'Chưa hết thời gian lượt' },
   INTERNAL_ERROR: { status: 500, message: 'Có lỗi xảy ra, vui lòng thử lại' },
 } as const satisfies Record<string, { status: number; message: string }>
