@@ -3,6 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { classify, parseCards, seatAfter, XAM_BASELINE_V2, type CardCode } from '@engine'
 import { Button } from '@/components/ui/button'
 import { ConnectionBadge } from '@/components/ConnectionBadge'
+import { Avatar } from '@/components/Avatar'
+import { ChatPanel, type ChatPerson } from '@/components/chat/ChatPanel'
+import { EmoteBar } from '@/components/chat/EmoteBar'
+import { EmoteBubble } from '@/components/chat/EmoteBubble'
+import { useRoomChat, type EmoteBubbleState } from '@/features/chat/useRoomChat'
 import { Hand } from '@/components/cards/Hand'
 import { RANK_LABEL, SUIT_SYMBOL } from '@/components/cards/cardLabels'
 import { CardBackStack, PlayingCard } from '@/components/cards/PlayingCard'
@@ -63,11 +68,6 @@ function useSecondsLeft(deadline: string | null): number | null {
   return Math.max(0, Math.ceil((Date.parse(deadline) - now) / 1000))
 }
 
-function initialOf(name: string): string {
-  const trimmed = name.trim()
-  return trimmed ? trimmed[0]!.toUpperCase() : '?'
-}
-
 function MiniCardChips({ cards }: { cards: readonly CardCode[] }) {
   const parsed = parseCards(cards)
   return (
@@ -103,6 +103,10 @@ export function GameTablePage() {
   const [startingNext, setStartingNext] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmAbort, setConfirmAbort] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [emotesOpen, setEmotesOpen] = useState(false)
+  /** Last chat message id the player has seen (for the unread badge). */
+  const [seenChatId, setSeenChatId] = useState(0)
   const selected = useSelectionStore((s) => s.selected)
   const clearSelection = useSelectionStore((s) => s.clear)
   const versionRef = useRef(0)
@@ -187,15 +191,17 @@ export function GameTablePage() {
   )
 
   const match = load.state === 'ready' ? load.match : null
+  const chat = useRoomChat(match?.roomId ?? null)
   // Presence on the room topic + auto-navigate when the next match starts in this room!
   const { online } = useTopic(
     match ? `room:${match.roomId}` : null,
     (event, payload) => {
-      if (event === 'match_started' && typeof payload.matchId === 'string' && payload.matchId !== matchId) {
+      if (event === 'chat') chat.receive(payload)
+      else if (event === 'match_started' && typeof payload.matchId === 'string' && payload.matchId !== matchId) {
         navigate(`/match/${payload.matchId}`)
       }
     },
-    () => {},
+    () => chat.reload(),
     { presenceKey: userId },
   )
 
@@ -352,6 +358,17 @@ export function GameTablePage() {
     }
   }
 
+  const lastChatId = chat.messages.at(-1)?.id ?? 0
+  const unread = chatOpen ? 0 : chat.messages.filter((m) => m.id > Math.max(seenChatId, chat.historyUpToId) && m.userId !== userId).length
+  function toggleChat() {
+    setSeenChatId(lastChatId)
+    setChatOpen((o) => !o)
+  }
+  const chatPeople: Record<string, ChatPerson> = Object.fromEntries(
+    match.seats.map((s) => [s.userId, { avatarId: s.avatarId, isBot: s.isBot }]),
+  )
+  const myBubble = me ? chat.bubbles[me.userId] : undefined
+
   const winner = match.winnerSeat !== null ? match.seats[match.winnerSeat] : null
   const turnName = match.seats[match.currentSeat]?.displayName
 
@@ -408,6 +425,29 @@ export function GameTablePage() {
                 {myTurn ? 'Bạn' : turnName} còn {secondsLeft}s
               </span>
             )}
+            <button
+              type="button"
+              aria-expanded={chatOpen}
+              aria-label={unread > 0 ? `Trò chuyện (${unread} tin mới)` : 'Trò chuyện'}
+              onClick={toggleChat}
+              className={cn(
+                'relative inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none',
+                chatOpen
+                  ? 'border-gold bg-gold/20 text-gold-light'
+                  : 'border-white/15 bg-white/8 text-ivory/80 hover:border-gold/50 hover:text-gold-light',
+              )}
+            >
+              <span aria-hidden>💬</span>
+              <span className="hidden sm:inline">Chat</span>
+              {unread > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -top-1.5 -right-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-suit-red px-1 text-[10px] font-bold text-white"
+                >
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </button>
             <Link
               to={`/room/${match.roomId}`}
               className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium text-ivory/80 transition-colors hover:border-gold/50 hover:text-gold-light"
@@ -416,6 +456,30 @@ export function GameTablePage() {
             </Link>
           </div>
         </div>
+
+        {chatOpen && (
+          <ChatPanel
+            tone="dark"
+            className="absolute top-14 right-3 left-3 z-40 h-[26rem] max-h-[calc(100%-4.5rem)] shadow-2xl sm:left-auto sm:w-[22rem]"
+            messages={chat.messages}
+            meId={userId}
+            people={chatPeople}
+            sending={chat.sending}
+            error={chat.error}
+            onSendText={chat.sendText}
+            onSendEmote={(code) => void chat.sendEmote(code)}
+            headerExtra={
+              <button
+                type="button"
+                aria-label="Đóng trò chuyện"
+                onClick={toggleChat}
+                className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-ivory/70 hover:bg-white/10 hover:text-ivory focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+              >
+                <span aria-hidden>✕</span>
+              </button>
+            }
+          />
+        )}
 
         {/* Opponents seated around the top/sides of the table */}
         <ol
@@ -438,6 +502,7 @@ export function GameTablePage() {
               match={match}
               online={s.isBot || online.has(s.userId)}
               secondsLeft={match.currentSeat === s.seat && !finished ? secondsLeft : null}
+              bubble={chat.bubbles[s.userId]}
               className={seatPositionClass(idx, order.length)}
             />
           ))}
@@ -606,7 +671,7 @@ export function GameTablePage() {
           <section
             aria-label="Bài của bạn"
             className={cn(
-              'z-10 grid gap-2.5 rounded-2xl border p-3 backdrop-blur-md transition-all sm:p-4',
+              'relative z-10 grid gap-2.5 rounded-2xl border p-3 backdrop-blur-md transition-all sm:p-4',
               myTurn
                 ? 'border-gold bg-black/45 shadow-[0_0_28px_rgba(212,160,23,0.28)]'
                 : 'border-white/12 bg-black/35',
@@ -615,14 +680,19 @@ export function GameTablePage() {
             {/* My Seat Header Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'inline-flex size-8 items-center justify-center rounded-full text-xs font-extrabold shadow-inner ring-2',
-                    myTurn ? 'bg-gold text-wood-dark ring-gold-light' : 'bg-felt text-gold-light ring-gold/40',
+                <span className="relative">
+                  <Avatar
+                    avatarId={me.avatarId}
+                    name={me.displayName}
+                    className={cn(
+                      'size-9 text-xs font-extrabold shadow-inner ring-2',
+                      myTurn ? 'ring-gold-light' : 'ring-gold/40',
+                    )}
+                    fallbackClassName={myTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-gold-light'}
+                  />
+                  {myBubble && (
+                    <EmoteBubble key={myBubble.key} code={myBubble.code} name="Bạn" className="bottom-11 left-0" />
                   )}
-                >
-                  {initialOf(me.displayName)}
                 </span>
                 <span className={cn('font-bold', myTurn ? 'text-gold-light' : 'text-ivory/85')}>
                   {myTurn ? 'Đến lượt bạn' : `Chờ ${turnName}…`}
@@ -635,6 +705,32 @@ export function GameTablePage() {
               </div>
 
               <div className="flex items-center gap-2">
+                <span className="relative">
+                  <button
+                    type="button"
+                    aria-expanded={emotesOpen}
+                    aria-label="Biểu cảm"
+                    title="Gửi biểu cảm"
+                    onClick={() => setEmotesOpen((o) => !o)}
+                    className={cn(
+                      'inline-flex size-8 cursor-pointer items-center justify-center rounded-full border text-base transition-colors focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none',
+                      emotesOpen ? 'border-gold bg-gold/25' : 'border-gold/35 bg-black/45 hover:border-gold',
+                    )}
+                  >
+                    <span aria-hidden>😊</span>
+                  </button>
+                  {emotesOpen && (
+                    <EmoteBar
+                      tone="dark"
+                      disabled={chat.sending}
+                      onPick={(code) => {
+                        setEmotesOpen(false)
+                        void chat.sendEmote(code)
+                      }}
+                      className="absolute right-0 bottom-10 z-40 w-[13.5rem] rounded-2xl border border-gold/40 bg-black/85 p-2 shadow-xl backdrop-blur-md"
+                    />
+                  )}
+                </span>
                 {hand.length === 1 && (
                   <span className="rounded-full bg-suit-red px-2.5 py-0.5 text-xs font-bold text-white shadow-2xs">
                     Báo 1
@@ -829,12 +925,14 @@ function SeatBadge({
   match,
   online,
   secondsLeft,
+  bubble,
   className,
 }: {
   seat: SeatView
   match: MatchView
   online: boolean
   secondsLeft: number | null
+  bubble?: EmoteBubbleState
   className?: string
 }) {
   const isTurn = match.status === 'PLAYING' && match.currentSeat === seat.seat
@@ -877,19 +975,19 @@ function SeatBadge({
             />
           </svg>
         )}
-        <span
+        <Avatar
+          avatarId={seat.avatarId}
+          isBot={seat.isBot}
+          userId={seat.userId}
+          name={seat.displayName}
           className={cn(
-            'inline-flex size-8 items-center justify-center rounded-full text-xs font-extrabold shadow-inner ring-1',
-            seat.isBot
-              ? 'bg-wood text-gold-light ring-gold/40'
-              : isTurn
-                ? 'bg-gold text-wood-dark ring-gold-light'
-                : 'bg-felt text-ivory ring-white/25',
+            'size-9 text-xs font-extrabold shadow-inner ring-1',
+            isTurn ? 'ring-gold-light' : 'ring-white/25',
           )}
-        >
-          {seat.isBot ? '⚙' : initialOf(seat.displayName)}
-        </span>
+          fallbackClassName={isTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-ivory'}
+        />
       </div>
+      {bubble && <EmoteBubble key={bubble.key} code={bubble.code} name={seat.displayName} className="top-2 right-2" />}
 
       {/* Seat details: Note `li p:first-child` is kept intact for unit test compatibility */}
       <div className="grid min-w-0 flex-1 gap-0.5">

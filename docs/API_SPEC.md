@@ -77,9 +77,18 @@ All three require `profiles.is_admin` (set by SQL); otherwise `NOT_ADMIN` (403).
 ```
 Never contains a hand. Card codes: rank `3-9 T J Q K A 2` + suit `S C D H`.
 
+## Chat and emotes (migration 0015)
+Not an Edge Function: the client calls the RPC directly with its own JWT.
+- `supabase.rpc('send_room_message', { p_room, p_kind: 'TEXT' | 'EMOTE', p_body })` → the stored message (same shape as the `chat` event).
+  Errors (`P0001` message): `INVALID_MESSAGE` (empty, > 200 chars, unknown emote/kind), `NOT_ROOM_MEMBER`, `ACCOUNT_LOCKED`,
+  `RATE_LIMITED` (more than 5 messages per 10 s), `NOT_AUTHENTICATED`. Vietnamese texts: `src/features/chat/api.ts`.
+- History: `from('room_messages').select(CHAT_SELECT)` (latest 50); RLS returns only messages sent since the caller joined.
+- Avatar: `from('profiles').update({ avatar_id })` on the caller's own row.
+
 ## Realtime
 Private channels, authorised by RLS on `realtime.messages`:
-- `room:<roomId>`: active room members, seated or waiting. Events `players_changed`, `match_started { matchId }`, `match_finished { matchId }`.
+- `room:<roomId>`: active room members, seated or waiting. Events `players_changed`, `match_started { matchId }`, `match_finished { matchId }`,
+  and `chat { id, roomId, userId, displayName, kind: 'TEXT' | 'EMOTE', body, createdAt }` (append to the chat, never a refetch).
   Presence (key = user id) shows who is online.
 - `match:<matchId>`: seated players and the room's waiting members (watching). Event `state` = the public state above, sent after each commit.
 

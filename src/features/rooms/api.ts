@@ -37,6 +37,7 @@ export interface RoomPlayer {
   displayName: string
   isBot: boolean
   points: number
+  avatarId?: string | null
 }
 
 export interface RoomView {
@@ -63,7 +64,7 @@ interface RoomRow {
     user_id: string
     status: string
     joined_at: string
-    profile: { display_name: string; is_bot: boolean; total_score: number } | null
+    profile: { display_name: string; is_bot: boolean; total_score: number; avatar_id?: string | null } | null
   }[]
 }
 
@@ -83,6 +84,7 @@ export async function fetchRoom(roomId: string): Promise<RoomView | null> {
     displayName: p.profile?.display_name ?? 'Người chơi',
     isBot: p.profile?.is_bot ?? false,
     points: p.profile?.total_score ?? 0,
+    avatarId: p.profile?.avatar_id ?? null,
   })
   return {
     id: data.id,

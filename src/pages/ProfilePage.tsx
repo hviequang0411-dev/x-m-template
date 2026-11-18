@@ -2,16 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FormField } from '@/components/FormField'
+import { Avatar } from '@/components/Avatar'
+import { AvatarPicker } from '@/components/AvatarPicker'
 import { useAuthStore } from '@/features/auth/store'
-import { fetchMyProfile, updateDisplayName, type Profile } from '@/features/profile/api'
+import { isUserAvatarId, type UserAvatarId } from '@/features/avatars/avatars'
+import { fetchMyProfile, updateAvatar, updateDisplayName, type Profile } from '@/features/profile/api'
+import { useProfileStore } from '@/features/profile/store'
 import { cn } from '@/lib/utils'
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'ready'; profile: Profile }
-
-function initialOf(name: string): string {
-  const trimmed = name.trim()
-  return trimmed ? trimmed[0]!.toUpperCase() : '?'
-}
 
 export function ProfilePage() {
   const userId = useAuthStore((s) => s.session?.user.id)
@@ -19,6 +18,8 @@ export function ProfilePage() {
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [avatarState, setAvatarState] = useState<{ saving: boolean; error: string | null }>({ saving: false, error: null })
+  const refreshHeader = useProfileStore((s) => s.refresh)
 
   useEffect(() => {
     if (!userId) return
@@ -60,6 +61,21 @@ export function ProfilePage() {
     }
   }
 
+  async function onPickAvatar(id: UserAvatarId | null) {
+    if (!userId || load.state !== 'ready') return
+    const before = load.profile
+    setLoad({ state: 'ready', profile: { ...before, avatar_id: id } })
+    setAvatarState({ saving: true, error: null })
+    try {
+      await updateAvatar(userId, id)
+      setAvatarState({ saving: false, error: null })
+      void refreshHeader(userId)
+    } catch {
+      setLoad({ state: 'ready', profile: before })
+      setAvatarState({ saving: false, error: 'Không lưu được avatar, vui lòng thử lại' })
+    }
+  }
+
   if (load.state === 'loading')
     return (
       <div role="status" className="grid gap-6">
@@ -93,12 +109,12 @@ export function ProfilePage() {
   return (
     <div className="grid gap-6">
       <section className="flex items-center gap-4 rounded-2xl border border-gold/45 bg-gradient-to-r from-felt-dark via-felt to-felt-dark p-5 text-ivory shadow-md sm:p-6">
-        <div
-          aria-hidden
-          className="flex size-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold font-display text-2xl font-bold text-wood-dark shadow-md ring-2 ring-gold-bright/50"
-        >
-          {initialOf(profile.display_name)}
-        </div>
+        <Avatar
+          avatarId={profile.avatar_id}
+          name={profile.display_name}
+          className="size-16 font-display text-2xl shadow-md ring-2 ring-gold-bright/60"
+          fallbackClassName="bg-gradient-to-b from-gold-light to-gold text-wood-dark"
+        />
         <div className="min-w-0">
           <h2 className="truncate font-display text-2xl font-bold text-gold-light sm:text-3xl">
             {profile.display_name}
@@ -131,6 +147,31 @@ export function ProfilePage() {
         ))}
       </dl>
       <p className="text-xs text-slate-500">Điểm chỉ để xếp hạng, không có giá trị tiền tệ.</p>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Avatar</CardTitle>
+          <CardDescription>Chọn hình đại diện hiện ở ghế ngồi, phòng chờ và khung chat.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <AvatarPicker
+            value={isUserAvatarId(profile.avatar_id) ? profile.avatar_id : null}
+            name={profile.display_name}
+            disabled={avatarState.saving}
+            onChange={(id) => void onPickAvatar(id)}
+          />
+          {avatarState.error && (
+            <p role="alert" className="text-sm font-medium text-suit-red">
+              {avatarState.error}
+            </p>
+          )}
+          {avatarState.saving && (
+            <p role="status" className="text-sm text-slate-500">
+              Đang lưu…
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

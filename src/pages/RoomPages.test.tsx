@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
@@ -15,6 +15,7 @@ import { HistoryPage } from './HistoryPage'
 import { AdminPage } from './AdminPage'
 import { AppLayout } from './AppLayout'
 import { useProfileStore } from '@/features/profile/store'
+import { useTopic } from '@/lib/realtime'
 
 const rooms = vi.hoisted(() => ({
   fetchMyActiveRoom: vi.fn(),
@@ -42,7 +43,9 @@ const match = vi.hoisted(() => ({
 }))
 vi.mock('@/features/rooms/api', () => rooms)
 vi.mock('@/features/match/api', () => match)
-const profile = vi.hoisted(() => ({ fetchMyProfile: vi.fn(), updateDisplayName: vi.fn() }))
+const profile = vi.hoisted(() => ({ fetchMyProfile: vi.fn(), updateDisplayName: vi.fn(), updateAvatar: vi.fn() }))
+const chatApi = vi.hoisted(() => ({ fetchRoomMessages: vi.fn(), sendRoomMessage: vi.fn() }))
+vi.mock('@/features/chat/api', async (orig) => ({ ...(await orig<typeof import('@/features/chat/api')>()), ...chatApi }))
 vi.mock('@/features/profile/api', () => profile)
 vi.mock('@/lib/realtime', () => ({ useTopic: vi.fn(() => ({ status: 'connected', online: new Set(['u0', 'u1']) })) }))
 vi.mock('@/lib/functions', async () => {
@@ -63,6 +66,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
   profile.fetchMyProfile.mockResolvedValue(PROFILE)
+  chatApi.fetchRoomMessages.mockResolvedValue([])
   useProfileStore.setState({ profile: null })
   useAuthStore.setState({ status: 'signedIn', session: { user: { id: ME } } as unknown as Session })
   useSelectionStore.setState({ selected: [] })
@@ -203,6 +207,106 @@ describe('Waiting room', () => {
     renderAt('/room/r1')
     expect(await screen.findByText(/Không tìm thấy ván này/)).toBeInTheDocument()
     expect(match.fetchMatch).toHaveBeenCalledWith('m9')
+  })
+})
+
+/** Simulates a broadcast on a room topic the page subscribed to. */
+function broadcast(topic: string, event: string, payload: Record<string, unknown>) {
+  const call = vi.mocked(useTopic).mock.calls.filter((c) => c[0] === topic).at(-1)
+  if (!call) throw new Error(`not subscribed to ${topic}`)
+  act(() => call[1](event, payload))
+}
+const chatPayload = (id: number, userId: string, kind: 'TEXT' | 'EMOTE', body: string) => ({
+  id, roomId: 'r1', userId, displayName: `Người ${userId.slice(1)}`, kind, body, createdAt: '2026-11-18T10:00:00Z',
+})
+
+describe('Room chat and avatars', () => {
+  it('waiting room: shows picked avatars, loads the chat and sends a message', async () => {
+    const r = room(2)
+    r.players[1]!.avatarId = 'panda'
+    rooms.fetchRoom.mockResolvedValue(r)
+    chatApi.fetchRoomMessages.mockResolvedValue([chatPayload(1, 'u1', 'TEXT', 'chào An')])
+    chatApi.sendRoomMessage.mockResolvedValue(chatPayload(2, 'u0', 'TEXT', 'chào Bình'))
+    const user = renderAt('/room/r1')
+    const seats = await screen.findByRole('list', { name: 'Chỗ ngồi' })
+    expect(seats.querySelector('svg[data-avatar="panda"]')).toBeInTheDocument()
+    expect(await screen.findByText('chào An')).toBeInTheDocument()
+    expect(chatApi.fetchRoomMessages).toHaveBeenCalledWith('r1')
+
+    await user.type(screen.getByLabelText('Tin nhắn'), 'chào Bình{Enter}')
+    expect(chatApi.sendRoomMessage).toHaveBeenCalledWith('r1', 'TEXT', 'chào Bình')
+    expect(await screen.findByText('chào Bình')).toBeInTheDocument()
+  })
+
+  it('waiting room: a chat broadcast does not refetch the room; an emote pops next to the seat', async () => {
+    rooms.fetchRoom.mockResolvedValue(room(2))
+    renderAt('/room/r1')
+    await screen.findByRole('list', { name: 'Chỗ ngồi' })
+    const fetches = rooms.fetchRoom.mock.calls.length
+    broadcast('room:r1', 'chat', chatPayload(5, 'u1', 'EMOTE', 'nice'))
+    const seats = screen.getByRole('list', { name: 'Chỗ ngồi' })
+    expect(within(seats).getByRole('status', { name: 'Người 1: Hay!' })).toBeInTheDocument()
+    expect(rooms.fetchRoom.mock.calls.length).toBe(fetches)
+  })
+
+  it('a refused message shows the reason', async () => {
+    const { ChatError } = await import('@/features/chat/api')
+    rooms.fetchRoom.mockResolvedValue(room(2))
+    chatApi.sendRoomMessage.mockRejectedValue(new ChatError('RATE_LIMITED'))
+    const user = renderAt('/room/r1')
+    await user.click(await screen.findByRole('button', { name: 'Gửi biểu cảm: Haha' }))
+    expect(chatApi.sendRoomMessage).toHaveBeenCalledWith('r1', 'EMOTE', 'laugh')
+    expect(await screen.findByText(/gửi nhanh quá/)).toBeInTheDocument()
+  })
+
+  it('game table: bots get a robot avatar, emotes pop next to seats, chat opens with an unread badge', async () => {
+    match.fetchMatch.mockResolvedValue({
+      matchId: 'm1', roomId: 'r1', hostId: 'u0', turnDeadline: null, ranked: false, version: 3, status: 'PLAYING',
+      currentSeat: 0, leadSeat: 0, currentTrick: null, passedSeats: [], winnerSeat: null,
+      seats: [
+        { seat: 0, userId: 'u0', displayName: 'Người 0', cardCount: 10, hasPlayed: false, status: 'PLAYING', isBot: false, avatarId: 'fox' },
+        { seat: 1, userId: 'bot1', displayName: 'Máy 1', cardCount: 10, hasPlayed: false, status: 'PLAYING', isBot: true },
+      ],
+    } satisfies MatchView)
+    match.fetchMyHand.mockResolvedValue(['3S'])
+    chatApi.sendRoomMessage.mockResolvedValue(chatPayload(9, 'u0', 'EMOTE', 'gg'))
+    const user = renderAt('/match/m1')
+    const opponents = await screen.findByRole('list', { name: 'Đối thủ' })
+    expect(opponents.querySelector('svg[data-avatar^="bot-"]')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Bài của bạn' }).querySelector('svg[data-avatar="fox"]')).toBeInTheDocument()
+
+    // A quick emote from my seat.
+    await user.click(screen.getByRole('button', { name: 'Biểu cảm' }))
+    await user.click(screen.getByRole('button', { name: 'Gửi biểu cảm: GG' }))
+    expect(chatApi.sendRoomMessage).toHaveBeenCalledWith('r1', 'EMOTE', 'gg')
+    expect(await screen.findByRole('status', { name: 'Bạn: GG' })).toBeInTheDocument()
+
+    // Someone else talks while the chat is closed.
+    broadcast('room:r1', 'chat', chatPayload(10, 'bot1', 'EMOTE', 'wow'))
+    expect(within(opponents).getByRole('status', { name: 'Máy 1: Wow' })).toBeInTheDocument()
+    broadcast('room:r1', 'chat', chatPayload(11, 'u3', 'TEXT', 'nhanh lên nào'))
+    await user.click(screen.getByRole('button', { name: 'Trò chuyện (2 tin mới)' }))
+    expect(screen.getByRole('region', { name: 'Trò chuyện' })).toHaveTextContent('nhanh lên nào')
+    await user.click(screen.getByRole('button', { name: 'Đóng trò chuyện' }))
+    expect(screen.getByRole('button', { name: 'Trò chuyện' })).toBeInTheDocument()
+  })
+
+  it('profile: picking an avatar saves it at once and updates the header', async () => {
+    profile.updateAvatar.mockResolvedValue(undefined)
+    const user = renderAt('/profile')
+    await user.click(await screen.findByRole('radio', { name: 'Cáo' }))
+    expect(profile.updateAvatar).toHaveBeenCalledWith(ME, 'fox')
+    expect(screen.getByRole('radio', { name: 'Cáo' })).toHaveAttribute('aria-checked', 'true')
+    await waitFor(() => expect(profile.fetchMyProfile.mock.calls.length).toBeGreaterThanOrEqual(2))
+  })
+
+  it('profile: a failed save puts the previous choice back', async () => {
+    profile.fetchMyProfile.mockResolvedValue({ ...PROFILE, avatar_id: 'cat' })
+    profile.updateAvatar.mockRejectedValue(new Error('PROFILE_UPDATE_FAILED'))
+    const user = renderAt('/profile')
+    await user.click(await screen.findByRole('radio', { name: 'Hổ' }))
+    expect(await screen.findByText('Không lưu được avatar, vui lòng thử lại')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Mèo may mắn' })).toHaveAttribute('aria-checked', 'true')
   })
 })
 

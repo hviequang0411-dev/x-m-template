@@ -141,6 +141,27 @@ body {
   }
 }
 
+@keyframes emote-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+  18% {
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 @keyframes confetti-fall {
   0% {
     opacity: 1;
@@ -167,6 +188,10 @@ body {
   animation: turn-glow 2.2s ease-in-out infinite;
 }
 
+.animate-emote-pop {
+  animation: emote-pop 3.5s ease-out forwards;
+}
+
 .animate-confetti {
   animation: confetti-fall 1.75s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
@@ -186,5 +211,11 @@ body {
   .animate-turn-seat,
   .animate-confetti {
     animation: none !important;
+  }
+
+  /* The bubble is removed by a timer; without motion it simply shows, then goes. */
+  .animate-emote-pop {
+    animation: none !important;
+    opacity: 1;
   }
 }

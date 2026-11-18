@@ -3,6 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConnectionBadge } from '@/components/ConnectionBadge'
+import { Avatar } from '@/components/Avatar'
+import { ChatPanel, type ChatPerson } from '@/components/chat/ChatPanel'
+import { EmoteBubble } from '@/components/chat/EmoteBubble'
+import { useRoomChat } from '@/features/chat/useRoomChat'
 import { useAuthStore } from '@/features/auth/store'
 import { startMatch } from '@/features/match/api'
 import { addBot, fetchRoom, leaveRoom, removeBot, type RoomPlayer, type RoomView } from '@/features/rooms/api'
@@ -17,11 +21,6 @@ const MIN_POINTS = 10
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'gone' } | { state: 'ready'; room: RoomView }
 
-function initialOf(name: string): string {
-  const trimmed = name.trim()
-  return trimmed ? trimmed[0]!.toUpperCase() : '?'
-}
-
 export function WaitingRoomPage() {
   const { roomId = '' } = useParams()
   const userId = useAuthStore((s) => s.session?.user.id)
@@ -30,6 +29,7 @@ export function WaitingRoomPage() {
   const [busy, setBusy] = useState<'start' | 'leave' | 'bot' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const chat = useRoomChat(roomId || null)
 
   const apply = useCallback(
     (room: RoomView | null | 'error') => {
@@ -56,10 +56,14 @@ export function WaitingRoomPage() {
   const { status: connection, online } = useTopic(
     roomId ? `room:${roomId}` : null,
     (event, payload) => {
-      if (event === 'match_started' && typeof payload.matchId === 'string') navigate(`/match/${payload.matchId}`)
+      if (event === 'chat') chat.receive(payload)
+      else if (event === 'match_started' && typeof payload.matchId === 'string') navigate(`/match/${payload.matchId}`)
       else void refresh()
     },
-    () => void refresh(),
+    () => {
+      void refresh()
+      chat.reload()
+    },
     { presenceKey: userId },
   )
 
@@ -132,6 +136,9 @@ export function WaitingRoomPage() {
   const canTriggerStart = isHost || (room.currentMatchId !== null && !iAmWaiting)
   const seats = [0, 1, 2, 3].map((seat) => room.players.find((p) => p.seat === seat) ?? null)
   const isOnline = (p: RoomPlayer) => p.isBot || online.has(p.userId)
+  const people: Record<string, ChatPerson> = Object.fromEntries(
+    [...room.players, ...room.waiting].map((p) => [p.userId, { avatarId: p.avatarId, isBot: p.isBot }]),
+  )
 
   async function copyCode() {
     try {
@@ -197,7 +204,7 @@ export function WaitingRoomPage() {
             <li
               key={seat}
               className={cn(
-                'flex items-center justify-between gap-3 rounded-2xl border p-4 transition-all',
+                'relative flex items-center justify-between gap-3 rounded-2xl border p-4 transition-all',
                 p
                   ? seatIsMe
                     ? 'border-gold bg-ivory shadow-sm ring-1 ring-gold/35'
@@ -207,20 +214,23 @@ export function WaitingRoomPage() {
             >
               <div className="flex min-w-0 items-center gap-3">
                 {/* Seat Avatar */}
-                <div
-                  aria-hidden
-                  className={cn(
-                    'relative flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-bold shadow-inner ring-2',
-                    !p
-                      ? 'border border-dashed border-slate-300 bg-cream text-slate-400 ring-transparent'
-                      : p.isBot
-                        ? 'bg-wood text-gold-light ring-gold/40'
-                        : seatIsHost
-                          ? 'bg-gradient-to-b from-gold-light to-gold text-wood-dark ring-gold-dark/40'
-                          : 'bg-felt text-ivory ring-felt-light/40',
+                <div aria-hidden className="relative shrink-0">
+                  {p ? (
+                    <Avatar
+                      avatarId={p.avatarId}
+                      isBot={p.isBot}
+                      userId={p.userId}
+                      name={p.displayName}
+                      className={cn('size-11 text-sm shadow-inner ring-2', seatIsHost ? 'ring-gold' : 'ring-gold/40')}
+                      fallbackClassName={
+                        seatIsHost ? 'bg-gradient-to-b from-gold-light to-gold text-wood-dark' : 'bg-felt text-ivory'
+                      }
+                    />
+                  ) : (
+                    <span className="flex size-11 items-center justify-center rounded-full border border-dashed border-slate-300 bg-cream text-sm font-bold text-slate-400">
+                      {seat + 1}
+                    </span>
                   )}
-                >
-                  {!p ? seat + 1 : p.isBot ? '⚙' : initialOf(p.displayName)}
                   {seatIsHost && (
                     <span
                       title="Chủ phòng"
@@ -283,6 +293,14 @@ export function WaitingRoomPage() {
                   </Button>
                 )}
               </span>
+              {p && chat.bubbles[p.userId] && (
+                <EmoteBubble
+                  key={chat.bubbles[p.userId]!.key}
+                  code={chat.bubbles[p.userId]!.code}
+                  name={p.displayName}
+                  className="-top-3.5 left-16"
+                />
+              )}
             </li>
           )
         })}
@@ -299,10 +317,19 @@ export function WaitingRoomPage() {
             {room.waiting.map((p, i) => (
               <li
                 key={p.userId}
-                className="rounded-full border border-gold/40 bg-cream px-3.5 py-1 text-sm font-medium text-slate-800"
+                className="relative inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-cream py-0.5 pr-3.5 pl-0.5 text-sm font-medium text-slate-800"
               >
+                <Avatar avatarId={p.avatarId} userId={p.userId} name={p.displayName} className="size-6 text-[10px]" />
                 {i + 1}. {p.displayName}
                 {p.userId === userId && ' (bạn)'}
+                {chat.bubbles[p.userId] && (
+                  <EmoteBubble
+                    key={chat.bubbles[p.userId]!.key}
+                    code={chat.bubbles[p.userId]!.code}
+                    name={p.displayName}
+                    className="-top-9 left-0"
+                  />
+                )}
               </li>
             ))}
           </ol>
@@ -381,6 +408,17 @@ export function WaitingRoomPage() {
           {error}
         </p>
       )}
+
+      <ChatPanel
+        className="h-80"
+        messages={chat.messages}
+        meId={userId}
+        people={people}
+        sending={chat.sending}
+        error={chat.error}
+        onSendText={chat.sendText}
+        onSendEmote={(code) => void chat.sendEmote(code)}
+      />
     </div>
   )
 }

@@ -26,7 +26,8 @@ matches 1─* match_results (one per player)
 | id | uuid PK | FK → `auth.users(id)` on delete cascade |
 | username | text | UNIQUE, `^[a-z0-9_]{3,20}$` |
 | display_name | text | 1–32 chars |
-| avatar_url | text null | |
+| avatar_url | text null | (unused) |
+| avatar_id | text null | one of the built-in avatars (0015, check `profiles_avatar_id_valid`); null = show the initial. Bots never store one (the app draws a robot from their id) |
 | total_score | integer | default 0, updated only by the RPC |
 | matches_played / matches_won | integer | default 0, updated only by the RPC |
 
@@ -127,6 +128,19 @@ Index: `(room_id, status)`. Partial UNIQUE `(room_id) WHERE status='PLAYING'`: o
 
 Index: `(match_id, version_after)`. A DEAL action never stores hands.
 
+### room_messages (chat + emotes, 0015)
+| column | type | notes |
+|---|---|---|
+| id | bigint identity PK | ordering key |
+| room_id | uuid | FK → game_rooms on delete cascade |
+| user_id | uuid | FK → profiles; always the caller of `send_room_message` |
+| kind | text | `TEXT` or `EMOTE` |
+| body | text | TEXT: 1–200 chars, trimmed; EMOTE: `happy laugh sad angry wow hurry nice gg` |
+| created_at | timestamptz | |
+
+Indexes: `(room_id, id desc)`, `(user_id, created_at desc)` (rate limit). A room's messages older than a day are
+deleted on the next send.
+
 ### match_results
 | column | type | notes |
 |---|---|---|
@@ -167,7 +181,7 @@ Default for every table: `ENABLE ROW LEVEL SECURITY`; `REVOKE ALL ON … FROM an
 
 | Table | `authenticated` grant | RLS policy (SELECT) | Writes |
 |---|---|---|---|
-| profiles | SELECT; UPDATE(display_name, avatar_url) | all authenticated can read (needed to show opponent names); UPDATE only `id = auth.uid()` | trigger / RPC |
+| profiles | SELECT; UPDATE(display_name, avatar_url, avatar_id) | all authenticated can read (needed to show opponent names); UPDATE only `id = auth.uid()` | trigger / RPC |
 | game_rulesets | SELECT | `status = 'APPROVED'` | migrations only |
 | game_rooms | SELECT | caller is an ACTIVE member (`is_room_member(id)`) | RPC only |
 | room_players | SELECT | caller is an ACTIVE member of the same room | RPC only |
@@ -176,6 +190,7 @@ Default for every table: `ENABLE ROW LEVEL SECURITY`; `REVOKE ALL ON … FROM an
 | player_private_states | SELECT | `user_id = auth.uid()` **only** | RPC only |
 | game_actions | SELECT (holds only public, already-played cards) | caller has a seat in the match | RPC only |
 | match_results | SELECT | caller has a seat in the match | RPC only |
+| room_messages | SELECT | caller is an ACTIVE member and joined before the message (`can_read_room_message`) | `send_room_message` only |
 
 `anon` gets nothing. Membership helpers (`is_room_member`, `is_match_player`) are `SECURITY DEFINER STABLE`
 functions so the policies don't recurse.
@@ -209,6 +224,7 @@ only for members, and allow `INSERT` (client send) only for Presence on `room:<i
 | `20261117000010_room_rpcs_v2.sql` | `create_room`/`join_room`/`leave_room` v2, `promote_waiting`, `free_seat`, `add_bot`, `remove_bot`, `idle_bot`, `assert_not_locked` | ✅ applied |
 | `20261117000011_game_rpcs_v2.sql` | `start_match` (2–4, ranked, 10-point minimum), `apply_game_action` (balance cap, unranked bot matches, promotion), `finish_match`, `match_public_state` (+ranked) | ✅ applied |
 | `20261117000012_admin.sql` | `admin_list_users`, `admin_adjust_points`, `admin_set_locked` | ✅ applied |
+| `20261118000015_avatars_chat_emotes.sql` | `profiles.avatar_id` (+ column grant); `room_messages`; `can_read_room_message`; `send_room_message(p_room, p_kind, p_body)` (callable by `authenticated`: membership, not locked, length/emote check, 5 messages per 10 s per user under an advisory lock, broadcast `chat` on `room:<id>`) | ⏳ local only, not on production |
 
 **Making an admin:** `update public.profiles set is_admin = true where username = '<username>';` (SQL editor or psql; there is no UI for it).
 

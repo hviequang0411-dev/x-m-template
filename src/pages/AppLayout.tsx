@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/Avatar'
 import { signOut } from '@/features/auth/api'
 import { useAuthStore } from '@/features/auth/store'
 import { useProfileStore } from '@/features/profile/store'
@@ -67,9 +68,17 @@ export function AppLayout() {
           <div className="flex min-w-0 items-center gap-1 text-sm sm:gap-2.5">
             {profile && (
               <span
-                className="flex min-w-0 items-center gap-1 rounded-full border border-gold/30 bg-white/8 py-0.5 pl-2 pr-1 sm:gap-2 sm:pl-2.5"
+                className="flex min-w-0 items-center gap-1 rounded-full border border-gold/30 bg-white/8 py-0.5 pl-0.5 pr-1 sm:gap-2"
                 aria-label="Tài khoản"
               >
+                <Link to="/profile" title="Hồ sơ" className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold">
+                  <Avatar
+                    avatarId={profile.avatar_id}
+                    name={profile.display_name}
+                    className="size-7 text-xs ring-1 ring-gold/50"
+                    fallbackClassName="bg-gradient-to-b from-gold-light to-gold text-wood-dark"
+                  />
+                </Link>
                 <span className="max-w-14 truncate text-xs font-medium text-ivory sm:max-w-32 sm:text-sm">
                   {profile.display_name}
                 </span>

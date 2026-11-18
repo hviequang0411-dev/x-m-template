@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/FormField'
+import { Avatar } from '@/components/Avatar'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/features/auth/store'
 import { fetchMyProfile, type Profile } from '@/features/profile/api'
@@ -108,7 +109,16 @@ export function LobbyPage() {
         >
           ♠
         </span>
-        <div className="relative z-10 grid gap-1.5">
+        <div className="relative z-10 flex items-center gap-4">
+          <Link to="/profile" title="Đổi avatar" className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold">
+            <Avatar
+              avatarId={profile?.avatar_id}
+              name={profile?.display_name ?? '?'}
+              className="size-14 font-display text-2xl shadow-md ring-2 ring-gold-bright/60 sm:size-16"
+              fallbackClassName="bg-gradient-to-b from-gold-light to-gold text-wood-dark"
+            />
+          </Link>
+        <div className="grid min-w-0 gap-1.5">
           <p className="text-xs font-semibold tracking-wider text-gold-light/80 uppercase">Sảnh chính</p>
           <h2 className="font-display text-2xl font-bold text-gold-light sm:text-3xl">
             Xin chào, {profile?.display_name ?? 'người chơi'}
@@ -118,6 +128,7 @@ export function LobbyPage() {
               Điểm: {profile.total_score} · Đã chơi: {profile.matches_played} · Thắng: {profile.matches_won}
             </p>
           )}
+        </div>
         </div>
       </section>
 

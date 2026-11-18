@@ -10,6 +10,8 @@ export interface Profile {
   matches_won: number
   is_admin: boolean
   is_locked: boolean
+  /** One of the built-in avatars (src/features/avatars), or null when none was picked. */
+  avatar_id?: string | null
 }
 
 export async function fetchMyProfile(userId: string): Promise<Profile | null> {
@@ -22,8 +24,13 @@ export async function fetchMyProfile(userId: string): Promise<Profile | null> {
   return data
 }
 
-/** Only display_name (and avatar_url) are writable by the owner (column grant + RLS). */
+/** Only display_name, avatar_id (and avatar_url) are writable by the owner (column grant + RLS). */
 export async function updateDisplayName(userId: string, displayName: string): Promise<void> {
   const { error } = await supabase.from('profiles').update({ display_name: displayName }).eq('id', userId)
+  if (error) throw new Error('PROFILE_UPDATE_FAILED')
+}
+
+export async function updateAvatar(userId: string, avatarId: string | null): Promise<void> {
+  const { error } = await supabase.from('profiles').update({ avatar_id: avatarId }).eq('id', userId)
   if (error) throw new Error('PROFILE_UPDATE_FAILED')
 }
