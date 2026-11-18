@@ -8,10 +8,9 @@ export function authErrorMessage(error: { message?: string; code?: string } | nu
   const msg = (error.message ?? '').toLowerCase()
 
   if (code === 'invalid_credentials' || msg.includes('invalid login credentials'))
-    return 'Email hoặc mật khẩu không đúng'
+    return 'Tên đăng nhập hoặc mật khẩu không đúng'
   if (code === 'user_already_exists' || msg.includes('already registered'))
-    return 'Email này đã được đăng ký'
-  if (code === 'email_not_confirmed') return 'Vui lòng xác nhận email trước khi đăng nhập'
+    return 'Tên đăng nhập này đã được đăng ký'
   if (code === 'weak_password') return 'Mật khẩu quá yếu'
   if (code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit')
     return 'Bạn thao tác quá nhanh. Vui lòng thử lại sau.'

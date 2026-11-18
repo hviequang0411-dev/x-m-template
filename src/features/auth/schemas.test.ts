@@ -1,7 +1,6 @@
-import { LoginSchema, RegisterSchema, fieldErrors } from './schemas'
+import { LoginSchema, RegisterSchema, fieldErrors, toInternalEmail, toInternalUsername } from './schemas'
 
 const validRegistration = {
-  email: 'an@example.com',
   username: 'an_nguyen',
   displayName: 'An Nguyễn',
   password: 'secret123',
@@ -9,23 +8,34 @@ const validRegistration = {
 }
 
 describe('RegisterSchema', () => {
-  it('accepts a valid registration', () => {
+  it('accepts a valid registration without email', () => {
     expect(RegisterSchema.safeParse(validRegistration).success).toBe(true)
   })
 
-  it('normalises the username to trimmed lower case (matches the DB trigger)', () => {
-    const parsed = RegisterSchema.parse({ ...validRegistration, username: '  An_Nguyen ' })
-    expect(parsed.username).toBe('an_nguyen')
+  it.each(['ab', 'Quang Nguyễn', 'has space', 'dấu', 'dash-name', '1'])(
+    'accepts arbitrary username %j and maps it to a valid internal identifier',
+    (username) => {
+      const result = RegisterSchema.safeParse({ ...validRegistration, username })
+      expect(result.success).toBe(true)
+      const internal = toInternalUsername(username)
+      expect(internal).toMatch(/^[a-z0-9_]{3,20}$/)
+      expect(toInternalEmail(username)).toBe(`${internal}@xam.local`)
+    },
+  )
+
+  it('defaults displayName to username when left blank', () => {
+    const parsed = RegisterSchema.parse({ ...validRegistration, username: 'Minh Hoàng', displayName: '' })
+    expect(parsed.displayName).toBe('Minh Hoàng')
   })
 
-  it.each(['ab', 'a'.repeat(21), 'has space', 'dấu', 'dash-name'])('rejects username %j', (username) => {
-    const result = RegisterSchema.safeParse({ ...validRegistration, username })
+  it('rejects an empty username', () => {
+    const result = RegisterSchema.safeParse({ ...validRegistration, username: '   ' })
     expect(result.success).toBe(false)
     if (!result.success) expect(fieldErrors(result.error).username).toBeDefined()
   })
 
   it('rejects a short password', () => {
-    const result = RegisterSchema.safeParse({ ...validRegistration, password: 'short', confirmPassword: 'short' })
+    const result = RegisterSchema.safeParse({ ...validRegistration, password: '123', confirmPassword: '123' })
     expect(result.success).toBe(false)
   })
 
@@ -42,12 +52,12 @@ describe('RegisterSchema', () => {
 })
 
 describe('LoginSchema', () => {
-  it('requires a valid email and a password', () => {
-    const result = LoginSchema.safeParse({ email: 'nope', password: '' })
+  it('requires a username and a password', () => {
+    const result = LoginSchema.safeParse({ username: '  ', password: '' })
     expect(result.success).toBe(false)
     if (!result.success) {
       const errors = fieldErrors(result.error)
-      expect(errors.email).toBeDefined()
+      expect(errors.username).toBeDefined()
       expect(errors.password).toBeDefined()
     }
   })

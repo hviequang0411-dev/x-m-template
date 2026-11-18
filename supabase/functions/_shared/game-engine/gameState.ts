@@ -5,12 +5,15 @@ import {
   ok,
   type GameAction,
   type GameEvent,
+  type MatchEndReason,
   type MatchState,
   type MoveErrorCode,
   type Result,
   type SeatState,
 } from './state.ts'
-import { nextActiveSeat, roundIsOver } from './turn.ts'
+import { nextActiveSeat, roundIsOver, seatAfter } from './turn.ts'
+
+const TWO_RANK_VALUE = 15
 
 /** A fresh match: `hands[seat]` from the dealer, `leadSeat` from `chooseFirstLeader`. */
 export function createMatchState(hands: readonly (readonly CardCode[])[], leadSeat: number): MatchState {
@@ -24,11 +27,15 @@ export function createMatchState(hands: readonly (readonly CardCode[])[], leadSe
     currentTrick: null,
     passedSeats: [],
     winnerSeat: null,
+    samSeat: null,
+    foulSeat: null,
+    endReason: null,
   }
 }
 
-/** WinnerEvaluator: the match ends as soon as a seat empties its hand; that seat wins [R15]. */
-export function findWinner(state: Pick<MatchState, 'seats'>): number | null {
+/** WinnerEvaluator: returns `winnerSeat` if already decided, else the seat with an empty hand. */
+export function findWinner(state: Pick<MatchState, 'seats'> & { readonly winnerSeat?: number | null }): number | null {
+  if (state.winnerSeat !== undefined && state.winnerSeat !== null) return state.winnerSeat
   const i = state.seats.findIndex((s) => s.hand.length === 0)
   return i === -1 ? null : i
 }
@@ -53,6 +60,22 @@ export function applyAction(
   // Turn order runs over the seats this match actually has (2–4).
   const turns = { players: state.seats.length, direction: ruleset.direction }
 
+  // Báo Xâm: the declarer immediately takes the lead before any card is played.
+  if (valid.value.type === 'DECLARE_SAM') {
+    const events: GameEvent[] = [{ type: 'SAM_DECLARED', seat }]
+    return ok({
+      nextState: {
+        ...state,
+        samSeat: seat,
+        currentSeat: seat,
+        leadSeat: seat,
+        currentTrick: null,
+        passedSeats: [],
+      },
+      events,
+    })
+  }
+
   if (valid.value.type === 'PASS') {
     const passedSeats = [...state.passedSeats, seat]
     const events: GameEvent[] = [{ type: 'PASSED', seat }]
@@ -74,11 +97,74 @@ export function applyAction(
   )
   const events: GameEvent[] = [{ type: 'PLAYED', seat, combination }]
 
-  const winnerSeat = findWinner({ seats })
-  if (winnerSeat !== null) {
-    events.push({ type: 'MATCH_FINISHED', winnerSeat })
+  // Rule: If someone declared Báo Xâm (`samSeat`) and another player (`seat !== samSeat`) beats their play,
+  // the match ends immediately — the blocker (`seat`) wins and `samSeat` is penalized (Đền Xâm).
+  if (state.samSeat !== null && state.samSeat !== undefined && seat !== state.samSeat) {
+    const winnerSeat = seat
+    const foulSeat = state.samSeat
+    const endReason: MatchEndReason = 'SAM_CAUGHT'
+    events.push({ type: 'MATCH_FINISHED', winnerSeat, endReason, foulSeat })
     return ok({
-      nextState: { ...state, seats, currentTrick: combination, leadSeat: seat, status: 'FINISHED', winnerSeat },
+      nextState: {
+        ...state,
+        seats,
+        currentTrick: combination,
+        leadSeat: seat,
+        status: 'FINISHED',
+        winnerSeat,
+        foulSeat,
+        endReason,
+      },
+      events,
+    })
+  }
+
+  const emptySeat = seats.findIndex((s) => s.hand.length === 0)
+  if (emptySeat !== -1) {
+    // Rule (Thối 2 cuối): In v2+, if the last combination played to empty the hand is a 2 (single/pair/triple/quad 2),
+    // that player is penalized as losing (bị xử thua vì thối 2 cuối), and the opponent wins.
+    const isLastCardTwo = ruleset.version >= 2 && combination.type !== 'STRAIGHT' && combination.keyRank === TWO_RANK_VALUE
+    if (isLastCardTwo) {
+      const winnerSeat =
+        state.currentTrick !== null && state.leadSeat !== seat
+          ? state.leadSeat
+          : (nextActiveSeat(seat, state.passedSeats, turns) ?? seatAfter(seat, turns))
+      const foulSeat = seat
+      const endReason: MatchEndReason = 'THOI_2_CUOI'
+      events.push({ type: 'MATCH_FINISHED', winnerSeat, endReason, foulSeat })
+      return ok({
+        nextState: {
+          ...state,
+          seats,
+          currentTrick: combination,
+          leadSeat: seat,
+          status: 'FINISHED',
+          winnerSeat,
+          foulSeat,
+          endReason,
+        },
+        events,
+      })
+    }
+
+    const winnerSeat = emptySeat
+    const endReason: MatchEndReason = state.samSeat === winnerSeat ? 'SAM_SUCCESS' : 'NORMAL'
+    events.push(
+      endReason === 'NORMAL'
+        ? { type: 'MATCH_FINISHED', winnerSeat }
+        : { type: 'MATCH_FINISHED', winnerSeat, endReason, foulSeat: null },
+    )
+    return ok({
+      nextState: {
+        ...state,
+        seats,
+        currentTrick: combination,
+        leadSeat: seat,
+        status: 'FINISHED',
+        winnerSeat,
+        foulSeat: null,
+        endReason,
+      },
       events,
     })
   }

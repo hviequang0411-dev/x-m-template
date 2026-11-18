@@ -4,7 +4,7 @@ import { canBeat, classify, type Combination } from './combination.ts'
 import { shuffleAndDeal } from './deck.ts'
 import { applyAction, createMatchState, findWinner, timeoutAction, type Transition } from './gameState.ts'
 import { seededRandomInt, type RandomInt } from './rng.ts'
-import { XAM_BASELINE_V1 as R } from './ruleset.ts'
+import { XAM_BASELINE_V1 as R, XAM_BASELINE_V2 as R2 } from './ruleset.ts'
 import { toPublicState, type GameAction, type MatchState } from './state.ts'
 
 function deepFreeze<T>(v: T): T {
@@ -204,5 +204,54 @@ describe('random full games', () => {
       expect(s.seats[s.winnerSeat!]!.hand).toHaveLength(0)
       expect(s.seats.filter((x) => x.hand.length === 0)).toHaveLength(1)
     }
+  })
+})
+
+describe('Báo Xâm & Thối 2 cuối (v2 rules)', () => {
+  it('penalizes a player who plays a 2 as their final card (Thối 2 cuối)', () => {
+    const s0 = createMatchState([['2S'], ['4H', '5H']], 0)
+    const r = applyAction(s0, play(0, '2S'), R2)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.nextState).toMatchObject({
+      status: 'FINISHED',
+      winnerSeat: 1,
+      foulSeat: 0,
+      endReason: 'THOI_2_CUOI',
+    })
+  })
+
+  it('allows declaring Báo Xâm before any card is played, gives declarer the lead, and ends immediately if blocked', () => {
+    let s = createMatchState([['3S', '4S'], ['7H', '8H'], ['9D', 'AD']], 0)
+    // Seat 2 declares Báo Xâm even though seat 0 was the initial leader
+    const decl = applyAction(s, { type: 'DECLARE_SAM', seat: 2 }, R2)
+    expect(decl.ok).toBe(true)
+    if (!decl.ok) return
+    s = decl.value.nextState
+    expect(s).toMatchObject({ samSeat: 2, currentSeat: 2, leadSeat: 2 })
+
+    // Seat 2 leads 9D; CCW next is seat 1
+    const lead = applyAction(s, play(2, '9D'), R2)
+    expect(lead.ok).toBe(true)
+    if (!lead.ok) return
+    s = lead.value.nextState
+    expect(s.currentSeat).toBe(1)
+
+    // Seat 1 passes; next is seat 0; let's have seat 1 beat instead in a 2-seat scenario
+    const s2 = createMatchState([['5S', '6S'], ['KC', 'AC']], 0)
+    const d2 = applyAction(s2, { type: 'DECLARE_SAM', seat: 0 }, R2)
+    if (!d2.ok) throw new Error('expected ok')
+    const p1 = applyAction(d2.value.nextState, play(0, '5S'), R2)
+    if (!p1.ok) throw new Error('expected ok')
+    // Seat 1 blocks seat 0's Báo Xâm with KC → seat 1 wins immediately!
+    const block = applyAction(p1.value.nextState, play(1, 'KC'), R2)
+    expect(block.ok).toBe(true)
+    if (!block.ok) return
+    expect(block.value.nextState).toMatchObject({
+      status: 'FINISHED',
+      winnerSeat: 1,
+      foulSeat: 0,
+      endReason: 'SAM_CAUGHT',
+    })
   })
 })

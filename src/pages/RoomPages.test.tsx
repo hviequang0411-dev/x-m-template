@@ -34,6 +34,7 @@ const match = vi.hoisted(() => ({
   startMatch: vi.fn(),
   playCards: vi.fn(),
   passTurn: vi.fn(),
+  declareSam: vi.fn(),
   claimTimeout: vi.fn(),
   abortMatch: vi.fn(),
   fetchResults: vi.fn(),
@@ -434,6 +435,33 @@ describe('Game table v2', () => {
     renderAt('/match/m1')
     expect(await screen.findByText('Nợ 15, trả hết 4 điểm đang có')).toBeInTheDocument()
   })
+
+  it('allows declaring Báo Xâm before any card is played and continuing to the next match after finishing', async () => {
+    const unplayedSeats = seats(2).map((s) => ({ ...s, hasPlayed: false }))
+    match.fetchMatch.mockResolvedValue(base({ seats: unplayedSeats, currentSeat: 1 }))
+    match.declareSam.mockResolvedValue({ version: 4 })
+    const user = renderAt('/match/m1')
+    const samBtn = await screen.findByRole('button', { name: /Báo Xâm/ })
+    await user.click(samBtn)
+    expect(match.declareSam).toHaveBeenCalledWith('m1', 3)
+  })
+
+  it('shows Thối 2 cuối penalty and allows continuing directly to a new match', async () => {
+    match.fetchMatch.mockResolvedValue(
+      base({ status: 'FINISHED', winnerSeat: 1, foulSeat: 0, endReason: 'THOI_2_CUOI' }),
+    )
+    match.fetchResults.mockResolvedValue([
+      { seat: 0, userId: 'u0', displayName: 'Người 0', isWinner: false, remainingCards: 0, remainingHand: [], scoreDelta: -10, penalties: { thoi2: 1, thoi2Cuoi: true, owed: 15 } },
+      { seat: 1, userId: 'u1', displayName: 'Người 1', isWinner: true, remainingCards: 3, remainingHand: ['4S', '5S', '6S'], scoreDelta: 10, penalties: {} },
+    ])
+    match.startMatch.mockResolvedValue({ matchId: 'm2', version: 1 })
+    const user = renderAt('/match/m1')
+    expect(await screen.findByText(/đánh cây 2 cuối cùng nên bị xử thua/)).toBeInTheDocument()
+    expect(screen.getByText('Thối 2 cuối')).toBeInTheDocument()
+    const continueBtn = screen.getByRole('button', { name: 'Tiếp tục ván mới' })
+    await user.click(continueBtn)
+    expect(match.startMatch).toHaveBeenCalledWith('r1')
+  })
 })
 
 describe('Header', () => {
@@ -451,6 +479,21 @@ describe('Header', () => {
     renderAt('/with-header')
     expect(await screen.findByText(/Tài khoản của bạn đang bị khoá/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Quản trị' })).not.toBeInTheDocument()
+  })
+
+  it('toggles sound in header and persists to localStorage, and toggles mobile menu', async () => {
+    const user = renderAt('/with-header')
+    const soundBtn = await screen.findByRole('button', { name: 'Âm thanh' })
+    const initialPressed = soundBtn.getAttribute('aria-pressed')
+    await user.click(soundBtn)
+    const nextPressed = initialPressed === 'true' ? 'false' : 'true'
+    expect(soundBtn).toHaveAttribute('aria-pressed', nextPressed)
+    expect(window.localStorage.getItem('xam_sound_enabled')).toBe(nextPressed)
+
+    const menuBtn = screen.getByRole('button', { name: 'Menu' })
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'false')
+    await user.click(menuBtn)
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

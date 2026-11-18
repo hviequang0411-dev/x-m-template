@@ -6,7 +6,7 @@ import type { Combination } from './game-engine/combination.ts'
 import { applyAction, timeoutAction } from './game-engine/gameState.ts'
 import { resolveRuleset, type GameRuleSet } from './game-engine/ruleset.ts'
 import { calculateScores } from './game-engine/score.ts'
-import type { GameAction, MatchState } from './game-engine/state.ts'
+import type { GameAction, MatchEndReason, MatchState } from './game-engine/state.ts'
 import { callRpc } from './rpc.ts'
 
 export interface ActionRequest {
@@ -14,6 +14,7 @@ export interface ActionRequest {
   matchId: string
   expectedVersion: number
   cards?: CardCode[]
+  declareSam?: boolean
 }
 
 export interface ActionResult {
@@ -22,8 +23,12 @@ export interface ActionResult {
   duplicate?: true
 }
 
-/** PLAY / PASS by the caller, or TIMEOUT: any seated player claims an expired turn (R27). */
-export type ActionKind = 'PLAY' | 'PASS' | 'TIMEOUT'
+/** PLAY / PASS / DECLARE_SAM by the caller, or TIMEOUT: any seated player claims an expired turn (R27). */
+export type ActionKind = 'PLAY' | 'PASS' | 'TIMEOUT' | 'DECLARE_SAM'
+
+type StoredTrick =
+  | (Combination & { samSeat?: number | null; foulSeat?: number | null; endReason?: MatchEndReason | null })
+  | { samOnly: true; samSeat: number }
 
 interface MatchRow {
   id: string
@@ -32,7 +37,7 @@ interface MatchRow {
   ranked: boolean
   current_seat: number
   lead_seat: number
-  current_trick: Combination | null
+  current_trick: StoredTrick | null
   passed_seats: number[]
   winner_seat: number | null
   turn_deadline: string | null
@@ -51,6 +56,39 @@ export interface LoadedMatch {
   players: PlayerRow[]
   state: MatchState
   ruleset: GameRuleSet
+}
+
+function unpackTrick(raw: StoredTrick | null): {
+  currentTrick: Combination | null
+  samSeat: number | null
+  foulSeat: number | null
+  endReason: MatchEndReason | null
+} {
+  if (!raw) return { currentTrick: null, samSeat: null, foulSeat: null, endReason: null }
+  if ('samOnly' in raw) {
+    return { currentTrick: null, samSeat: raw.samSeat, foulSeat: null, endReason: null }
+  }
+  return {
+    currentTrick: { type: raw.type, size: raw.size, keyRank: raw.keyRank, cards: raw.cards },
+    samSeat: raw.samSeat ?? null,
+    foulSeat: raw.foulSeat ?? null,
+    endReason: raw.endReason ?? null,
+  }
+}
+
+function packTrick(next: MatchState): StoredTrick | null {
+  if (next.currentTrick) {
+    return {
+      ...next.currentTrick,
+      ...(next.samSeat != null ? { samSeat: next.samSeat } : {}),
+      ...(next.foulSeat != null ? { foulSeat: next.foulSeat } : {}),
+      ...(next.endReason != null ? { endReason: next.endReason } : {}),
+    }
+  }
+  if (next.samSeat != null) {
+    return { samOnly: true, samSeat: next.samSeat }
+  }
+  return null
 }
 
 /** Loads the authoritative state of a PLAYING match (service role: includes every hand). */
@@ -74,14 +112,18 @@ export async function loadMatch(db: SupabaseClient, matchId: string): Promise<Lo
   const { data: hands } = await db.from('player_private_states').select('user_id, hand').eq('match_id', matchId)
   const handOf = new Map((hands ?? []).map((h) => [h.user_id as string, h.hand as CardCode[]]))
 
+  const unpacked = unpackTrick(match.current_trick)
   const state: MatchState = {
     status: 'PLAYING',
     seats: (players ?? []).map((p) => ({ hand: handOf.get(p.user_id) ?? [], hasPlayed: p.has_played })),
     currentSeat: match.current_seat,
     leadSeat: match.lead_seat,
-    currentTrick: match.current_trick,
+    currentTrick: unpacked.currentTrick,
     passedSeats: match.passed_seats,
     winnerSeat: null,
+    samSeat: unpacked.samSeat,
+    foulSeat: unpacked.foulSeat,
+    endReason: unpacked.endReason,
   }
   return { match, players: players ?? [], state, ruleset: resolveRuleset(match.game_rulesets?.config) }
 }
@@ -116,9 +158,12 @@ async function commit(
       status: next.status,
       currentSeat: next.currentSeat,
       leadSeat: next.leadSeat,
-      currentTrick: next.currentTrick,
+      currentTrick: packTrick(next),
       passedSeats: next.passedSeats,
       winnerSeat: next.winnerSeat,
+      samSeat: next.samSeat ?? null,
+      foulSeat: next.foulSeat ?? null,
+      endReason: next.endReason ?? null,
       combination: played ? played.combination.type : null,
     },
     // Ranked only: amounts OWED from the engine; the RPC verifies them and applies the balance cap.
@@ -172,7 +217,9 @@ export async function runAction(
       ? timeoutAction(state, ruleset)
       : kind === 'PLAY'
         ? { type: 'PLAY', seat: me.seat, cards: req.cards ?? [] }
-        : { type: 'PASS', seat: me.seat }
+        : kind === 'DECLARE_SAM'
+          ? { type: 'DECLARE_SAM', seat: me.seat }
+          : { type: 'PASS', seat: me.seat }
   if (!action) throw new ApiError('MATCH_NOT_ACTIVE')
 
   // 7. commit

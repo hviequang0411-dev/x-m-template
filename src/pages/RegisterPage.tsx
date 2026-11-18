@@ -21,16 +21,15 @@ export function RegisterPage() {
     setSubmitting(false)
     if (!result.ok) return setErrors({ form: result.message })
     // Without email confirmation a session exists and RequireGuest redirects to the lobby.
-    // With confirmation enabled (production), the user lands on this message instead.
     setDone(true)
   }
 
   if (done) {
     return (
-      <Card>
+      <Card className="border-gold/40 shadow-2xl">
         <CardHeader>
-          <CardTitle>Đăng ký thành công</CardTitle>
-          <CardDescription>Nếu được yêu cầu, hãy kiểm tra email để xác nhận tài khoản.</CardDescription>
+          <CardTitle className="text-2xl">Đăng ký thành công</CardTitle>
+          <CardDescription>Tài khoản của bạn đã sẵn sàng để vào bàn chơi.</CardDescription>
         </CardHeader>
         <CardFooter>
           <Button asChild className="w-full">
@@ -42,16 +41,21 @@ export function RegisterPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tạo tài khoản</CardTitle>
-        <CardDescription>Chỉ dành cho người chơi thử nghiệm</CardDescription>
+    <Card className="border-gold/40 shadow-2xl">
+      <CardHeader className="border-b border-card-border/60 pb-4">
+        <CardTitle className="text-2xl">Tạo tài khoản</CardTitle>
+        <CardDescription>Chọn tên bất kỳ để vào bàn chơi nhanh</CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit} noValidate>
-        <CardContent className="grid gap-4">
-          <FormField id="email" label="Email" type="email" autoComplete="email" error={errors.email} />
+        <CardContent className="grid gap-4 pt-5">
           <FormField id="username" label="Tên đăng nhập" autoComplete="username" error={errors.username} />
-          <FormField id="displayName" label="Tên hiển thị" autoComplete="nickname" error={errors.displayName} />
+          <FormField
+            id="displayName"
+            label="Tên hiển thị"
+            placeholder="Để trống sẽ dùng tên đăng nhập"
+            autoComplete="nickname"
+            error={errors.displayName}
+          />
           <FormField
             id="password"
             label="Mật khẩu"
@@ -67,7 +71,7 @@ export function RegisterPage() {
             error={errors.confirmPassword}
           />
           {errors.form && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="rounded-lg border border-suit-red/30 bg-red-50 px-3 py-2 text-sm text-suit-red">
               {errors.form}
             </p>
           )}
@@ -76,9 +80,9 @@ export function RegisterPage() {
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? 'Đang tạo…' : 'Đăng ký'}
           </Button>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-600">
             Đã có tài khoản?{' '}
-            <Link to="/login" className="font-medium text-felt underline">
+            <Link to="/login" className="font-semibold text-felt underline">
               Đăng nhập
             </Link>
           </p>

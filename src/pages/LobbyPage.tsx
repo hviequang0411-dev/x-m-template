@@ -81,13 +81,18 @@ export function LobbyPage() {
 
   if (data.state === 'loading')
     return (
-      <p className="text-slate-500" role="status">
-        Đang tải…
-      </p>
+      <div role="status" className="grid gap-6">
+        <span className="sr-only">Đang tải…</span>
+        <div className="h-28 animate-pulse rounded-2xl border border-card-border bg-ivory p-6" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="h-44 animate-pulse rounded-2xl border border-card-border bg-ivory" />
+          <div className="h-44 animate-pulse rounded-2xl border border-card-border bg-ivory" />
+        </div>
+      </div>
     )
   if (data.state === 'error')
     return (
-      <p role="alert" className="text-red-600">
+      <p role="alert" className="rounded-xl border border-suit-red/30 bg-red-50 p-4 text-sm font-medium text-suit-red">
         Không tải được dữ liệu. Vui lòng tải lại trang.
       </p>
     )
@@ -95,51 +100,88 @@ export function LobbyPage() {
   const { profile, room } = data
   return (
     <div className="grid gap-6">
-      <section>
-        <h2 className="text-2xl font-semibold">Xin chào, {profile?.display_name ?? 'người chơi'}</h2>
-        {profile && (
-          <p className="text-sm text-slate-500">
-            Điểm: {profile.total_score} · Đã chơi: {profile.matches_played} · Thắng: {profile.matches_won}
-          </p>
-        )}
+      {/* Luxury Casino Welcome Banner */}
+      <section className="relative overflow-hidden rounded-2xl border border-gold/45 bg-gradient-to-r from-felt-dark via-felt to-felt-dark p-5 text-ivory shadow-md sm:p-6">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-4 -bottom-6 font-display text-8xl text-gold-light/10 select-none"
+        >
+          ♠
+        </span>
+        <div className="relative z-10 grid gap-1.5">
+          <p className="text-xs font-semibold tracking-wider text-gold-light/80 uppercase">Sảnh chính</p>
+          <h2 className="font-display text-2xl font-bold text-gold-light sm:text-3xl">
+            Xin chào, {profile?.display_name ?? 'người chơi'}
+          </h2>
+          {profile && (
+            <p className="text-sm text-ivory/85">
+              Điểm: {profile.total_score} · Đã chơi: {profile.matches_played} · Thắng: {profile.matches_won}
+            </p>
+          )}
+        </div>
       </section>
 
       {room ? (
-        <Card>
+        <Card className="border-gold/50">
           <CardHeader>
-            <CardTitle>Phòng hiện tại</CardTitle>
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="inline-flex size-8 items-center justify-center rounded-full bg-gold/20 text-sm text-gold-dark"
+              >
+                ♠
+              </span>
+              <CardTitle>Phòng hiện tại</CardTitle>
+            </div>
             <CardDescription>
-              Mã phòng <span className="font-mono font-semibold">{room.code}</span> ·{' '}
+              Mã phòng <span className="font-mono font-bold text-slate-900">{room.code}</span> ·{' '}
               {ROOM_STATUS_LABEL[room.status]} · {room.seat === null ? 'Đang trong hàng chờ' : `Ghế ${room.seat + 1}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="w-full sm:w-auto">
+            <Button asChild variant="gold" className="w-full font-bold sm:w-auto">
               <Link to={`/room/${room.roomId}`}>Vào phòng</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Card className="flex flex-col justify-between">
             <CardHeader>
-              <CardTitle>Tạo phòng</CardTitle>
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="inline-flex size-9 items-center justify-center rounded-xl bg-felt text-base text-gold-light shadow-xs"
+                >
+                  ♠
+                </span>
+                <CardTitle>Tạo phòng</CardTitle>
+              </div>
               <CardDescription>Tạo phòng riêng và mời 3 người bạn bằng mã phòng.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" disabled={busy !== null} onClick={() => void onCreate()}>
+              <Button variant="gold" className="w-full font-bold" disabled={busy !== null} onClick={() => void onCreate()}>
                 {busy === 'create' ? 'Đang tạo…' : 'Tạo phòng'}
               </Button>
               {createError && (
-                <p role="alert" className="mt-2 text-sm text-red-600">
+                <p role="alert" className="mt-2 text-sm text-suit-red">
                   {createError}
                 </p>
               )}
             </CardContent>
           </Card>
-          <Card>
+
+          <Card className="flex flex-col justify-between">
             <CardHeader>
-              <CardTitle>Vào phòng</CardTitle>
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="inline-flex size-9 items-center justify-center rounded-xl border border-gold/40 bg-cream text-base text-wood"
+                >
+                  ♦
+                </span>
+                <CardTitle>Vào phòng</CardTitle>
+              </div>
               <CardDescription>Nhập mã phòng 6 ký tự từ chủ phòng.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -152,7 +194,7 @@ export function LobbyPage() {
                   maxLength={6}
                   autoComplete="off"
                   autoCapitalize="characters"
-                  className="font-mono tracking-widest"
+                  className="font-mono text-base font-bold tracking-[0.25em]"
                   error={joinError ?? undefined}
                 />
                 <Button type="submit" variant="outline" className="w-full" disabled={busy !== null}>

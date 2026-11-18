@@ -1,7 +1,16 @@
-import type { CardCode, Combination } from '@engine'
+import type { CardCode, Combination, CombinationType, MatchEndReason } from '@engine'
 import { callFunction } from '@/lib/functions'
 import { supabase } from '@/lib/supabase'
 import { HAND_SELECT, HISTORY_SELECT, MATCH_SELECT, RESULTS_SELECT } from '@/features/queries'
+
+export interface MatchActionView {
+  id: string
+  version: number
+  seat: number | null
+  kind: 'DEAL' | 'PLAY' | 'PASS' | 'DECLARE_SAM' | 'ROUND_RESET' | 'ABORT'
+  cards?: CardCode[]
+  combination?: CombinationType | null
+}
 
 export interface SeatView {
   seat: number
@@ -28,8 +37,16 @@ export interface MatchView {
   currentTrick: Combination | null
   passedSeats: number[]
   winnerSeat: number | null
+  samSeat?: number | null
+  foulSeat?: number | null
+  endReason?: MatchEndReason | null
+  actions?: MatchActionView[]
   seats: SeatView[]
 }
+
+type StoredTrick =
+  | (Combination & { samSeat?: number | null; foulSeat?: number | null; endReason?: MatchEndReason | null })
+  | { samOnly: true; samSeat: number }
 
 interface MatchRow {
   id: string
@@ -41,7 +58,7 @@ interface MatchRow {
   status: MatchView['status']
   current_seat: number
   lead_seat: number
-  current_trick: Combination | null
+  current_trick: StoredTrick | null
   passed_seats: number[]
   winner_seat: number | null
   players: {
@@ -54,15 +71,59 @@ interface MatchRow {
   }[]
 }
 
+function unpackTrick(raw: StoredTrick | null): {
+  currentTrick: Combination | null
+  samSeat: number | null
+  foulSeat: number | null
+  endReason: MatchEndReason | null
+} {
+  if (!raw) return { currentTrick: null, samSeat: null, foulSeat: null, endReason: null }
+  if ('samOnly' in raw) {
+    return { currentTrick: null, samSeat: raw.samSeat, foulSeat: null, endReason: null }
+  }
+  return {
+    currentTrick: { type: raw.type, size: raw.size, keyRank: raw.keyRank, cards: raw.cards },
+    samSeat: raw.samSeat ?? null,
+    foulSeat: raw.foulSeat ?? null,
+    endReason: raw.endReason ?? null,
+  }
+}
+
 /** Reads the public state through RLS (seated players only). Null for non-players. */
 export async function fetchMatch(matchId: string): Promise<MatchView | null> {
-  const { data, error } = await supabase
-    .from('matches')
-    .select(MATCH_SELECT)
-    .eq('id', matchId)
-    .maybeSingle<MatchRow>()
+  const [{ data, error }, { data: rawActions }] = await Promise.all([
+    supabase.from('matches').select(MATCH_SELECT).eq('id', matchId).maybeSingle<MatchRow>(),
+    supabase
+      .from('game_actions')
+      .select('id, seat, action_type, cards, combination, version_after')
+      .eq('match_id', matchId)
+      .order('version_after', { ascending: false })
+      .limit(16),
+  ])
   if (error) throw new Error('MATCH_LOAD_FAILED')
   if (!data) return null
+  const unpacked = unpackTrick(data.current_trick)
+  const actions: MatchActionView[] = (rawActions ?? []).map((row: Record<string, unknown>) => {
+    const rawType = String(row.action_type ?? 'PLAY')
+    const kind: MatchActionView['kind'] =
+      rawType === 'PLAY' || rawType === 'TIMEOUT_PLAY'
+        ? 'PLAY'
+        : rawType === 'PASS' || rawType === 'TIMEOUT_PASS'
+          ? 'PASS'
+          : rawType === 'DECLARE_SAM'
+            ? 'DECLARE_SAM'
+            : rawType === 'ABORT'
+              ? 'ABORT'
+              : 'DEAL'
+    return {
+      id: String(row.id ?? row.version_after),
+      version: Number(row.version_after ?? 0),
+      seat: typeof row.seat === 'number' ? row.seat : null,
+      kind,
+      cards: Array.isArray(row.cards) ? (row.cards as CardCode[]) : undefined,
+      combination: (row.combination as CombinationType | null) ?? null,
+    }
+  })
   return {
     matchId: data.id,
     roomId: data.room_id,
@@ -73,9 +134,13 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
     status: data.status,
     currentSeat: data.current_seat,
     leadSeat: data.lead_seat,
-    currentTrick: data.current_trick,
+    currentTrick: unpacked.currentTrick,
     passedSeats: data.passed_seats,
     winnerSeat: data.winner_seat,
+    samSeat: unpacked.samSeat,
+    foulSeat: unpacked.foulSeat,
+    endReason: unpacked.endReason,
+    actions,
     seats: [...data.players]
       .sort((a, b) => a.seat - b.seat)
       .map((p) => ({
@@ -105,6 +170,14 @@ export const playCards = (matchId: string, expectedVersion: number, cards: CardC
 export const passTurn = (matchId: string, expectedVersion: number) =>
   callFunction<{ version: number }>('pass-turn', { actionId: crypto.randomUUID(), matchId, expectedVersion })
 
+export const declareSam = (matchId: string, expectedVersion: number) =>
+  callFunction<{ version: number }>('pass-turn', {
+    actionId: crypto.randomUUID(),
+    matchId,
+    expectedVersion,
+    declareSam: true,
+  })
+
 export const claimTimeout = (matchId: string, expectedVersion: number) =>
   callFunction<{ version: number }>('claim-timeout', { actionId: crypto.randomUUID(), matchId, expectedVersion })
 
@@ -119,7 +192,14 @@ export interface ResultView {
   remainingHand: CardCode[]
   scoreDelta: number
   /** owed: what a capped loser should have paid (they paid their whole balance instead) [R35]. */
-  penalties: { cong?: boolean; thoi2?: number; thoiTuQuy?: string[]; owed?: number }
+  penalties: {
+    cong?: boolean
+    thoi2?: number
+    thoi2Cuoi?: boolean
+    denSam?: boolean
+    thoiTuQuy?: string[]
+    owed?: number
+  }
 }
 
 /** The results persisted by the server at match end (RLS: seated players). Never computed here. */

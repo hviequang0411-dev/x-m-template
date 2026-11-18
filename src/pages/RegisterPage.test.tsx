@@ -17,8 +17,7 @@ function setup() {
 
 async function fill(user: ReturnType<typeof userEvent.setup>, overrides: Record<string, string> = {}) {
   const values = {
-    Email: 'an@example.com',
-    'Tên đăng nhập': 'an_nguyen',
+    'Tên đăng nhập': 'An Nguyễn',
     'Tên hiển thị': 'An',
     'Mật khẩu': 'secret123',
     'Xác nhận mật khẩu': 'secret123',
@@ -34,20 +33,20 @@ describe('RegisterPage', () => {
 
   it('shows validation errors and does not call the API for invalid input', async () => {
     const user = setup()
-    await fill(user, { 'Tên đăng nhập': 'x', 'Xác nhận mật khẩu': 'other1234' })
+    await fill(user, { 'Tên đăng nhập': '', 'Xác nhận mật khẩu': 'other1234' })
     await user.click(screen.getByRole('button', { name: 'Đăng ký' }))
-    expect(screen.getByText(/Tên đăng nhập 3–20 ký tự/)).toBeInTheDocument()
+    expect(screen.getByText('Vui lòng nhập tên đăng nhập')).toBeInTheDocument()
     expect(screen.getByText('Mật khẩu xác nhận không khớp')).toBeInTheDocument()
     expect(signUp).not.toHaveBeenCalled()
   })
 
-  it('submits normalised data and shows server errors', async () => {
-    signUp.mockResolvedValue({ ok: false, message: 'Email này đã được đăng ký' })
+  it('submits any username without email and shows server errors', async () => {
+    signUp.mockResolvedValue({ ok: false, message: 'Tên đăng nhập này đã được đăng ký' })
     const user = setup()
-    await fill(user, { 'Tên đăng nhập': 'An_Nguyen' })
+    await fill(user, { 'Tên đăng nhập': 'Quang 123', 'Tên hiển thị': '' })
     await user.click(screen.getByRole('button', { name: 'Đăng ký' }))
-    expect(signUp).toHaveBeenCalledWith(expect.objectContaining({ username: 'an_nguyen', email: 'an@example.com' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Email này đã được đăng ký')
+    expect(signUp).toHaveBeenCalledWith(expect.objectContaining({ username: 'Quang 123', displayName: 'Quang 123' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tên đăng nhập này đã được đăng ký')
   })
 
   it('shows the success state when sign-up succeeds', async () => {

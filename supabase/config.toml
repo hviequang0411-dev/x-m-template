@@ -429,53 +429,79 @@ enabled = true
 
 
 [functions.create-room]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.join-room]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.leave-room]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.start-match]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.play-cards]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.pass-turn]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.claim-timeout]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.finish-match]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.add-bot]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.remove-bot]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.admin-users]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.admin-adjust-points]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"
 
 [functions.admin-set-locked]
-verify_jwt = true
+# The gateway JWT check does not accept tokens signed with the new asymmetric keys (ES256);
+# every function verifies the caller itself with auth.getUser (see _shared/auth.ts).
+verify_jwt = false
 import_map = "./functions/deno.json"

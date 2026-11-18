@@ -9,7 +9,6 @@ test('1 player + 2 bots: add bots → start → play to the end → practice res
   const run = randomUUID().replace(/-/g, '').slice(0, 8)
   const password = `e2e-${randomUUID()}`
   await page.goto('/register')
-  await page.getByLabel('Email', { exact: true }).fill(`bot_e2e_${run}@xam.test`)
   await page.getByLabel('Tên đăng nhập', { exact: true }).fill(`bot_e2e_${run}`)
   await page.getByLabel('Tên hiển thị', { exact: true }).fill(`Solo ${run.slice(0, 4)}`)
   await page.getByLabel('Mật khẩu', { exact: true }).fill(password)

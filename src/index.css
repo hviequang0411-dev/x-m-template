@@ -1,16 +1,190 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Playfair Display", Georgia, Cambria, serif;
+
+  /* Casino Felt Greens */
   --color-felt: #0f5132;
-  --color-felt-dark: #0a3622;
+  --color-felt-dark: #082d1b;
+  --color-felt-light: #176942;
+  --color-felt-deep: #041b10;
+
+  /* Metallic Gold Accents */
   --color-gold: #d4a017;
+  --color-gold-light: #f3d478;
+  --color-gold-bright: #fae59e;
+  --color-gold-dark: #8c6608;
+  --color-gold-muted: #b58612;
+
+  /* Wood & Leather Trim */
+  --color-wood: #3d2314;
+  --color-wood-dark: #231209;
+  --color-wood-light: #5e3821;
+  --color-leather: #2b1810;
+
+  /* Warm Ivory & Card Surfaces */
+  --color-cream: #f7f3eb;
+  --color-cream-dark: #ebe3d3;
+  --color-ivory: #fffdf9;
+  --color-card-border: #dcd2be;
+
+  /* Card Suits (WCAG AA compliant on ivory) */
+  --color-suit-red: #c42026;
+  --color-suit-red-dark: #99161b;
+  --color-suit-black: #161e29;
 }
 
 :root {
   color-scheme: light;
-  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 body {
-  @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+  @apply min-h-screen bg-cream text-slate-900 antialiased;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(212, 160, 23, 0.07), transparent 60%),
+    linear-gradient(180deg, #f9f6f0 0%, #f1ece1 100%);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Luxury casino felt table surface with wood/leather rim & gold inlay */
+.casino-table-surface {
+  background-color: var(--color-felt);
+  background-image:
+    radial-gradient(ellipse at 50% 42%, rgba(25, 118, 72, 0.92) 0%, rgba(15, 81, 50, 0.96) 52%, rgba(7, 41, 25, 0.99) 88%, #03150c 100%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.012) 0px, rgba(255, 255, 255, 0.012) 2px, transparent 2px, transparent 8px);
+  box-shadow:
+    inset 0 0 70px rgba(2, 16, 9, 0.85),
+    inset 0 0 0 2px rgba(243, 212, 120, 0.35),
+    0 20px 48px -12px rgba(18, 10, 5, 0.65),
+    0 0 0 8px var(--color-wood),
+    0 0 0 11px var(--color-wood-dark),
+    0 0 0 13px var(--color-gold-dark);
+}
+
+/* Subtle inner gold ring line on the felt */
+.casino-felt-ring {
+  border: 1px solid rgba(243, 212, 120, 0.22);
+  box-shadow: inset 0 0 24px rgba(4, 27, 16, 0.45);
+}
+
+/* Ornamental back pattern for opponent face-down cards */
+.card-back-pattern {
+  background-color: var(--color-felt-dark);
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(243, 212, 120, 0.28) 1px, transparent 1px),
+    repeating-linear-gradient(45deg, rgba(212, 160, 23, 0.16) 0, rgba(212, 160, 23, 0.16) 2px, transparent 2px, transparent 6px),
+    repeating-linear-gradient(-45deg, rgba(212, 160, 23, 0.16) 0, rgba(212, 160, 23, 0.16) 2px, transparent 2px, transparent 6px);
+  background-size: 8px 8px, 100% 100%, 100% 100%;
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-gold),
+    0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Playing card depth & sheen */
+.playing-card-surface {
+  background: linear-gradient(165deg, #ffffff 0%, var(--color-ivory) 65%, #f4efe4 100%);
+  box-shadow:
+    0 4px 10px -2px rgba(15, 23, 42, 0.22),
+    0 2px 4px -1px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.playing-card-selected {
+  box-shadow:
+    0 12px 20px -4px rgba(15, 23, 42, 0.34),
+    0 0 0 2px var(--color-gold),
+    0 0 14px rgba(212, 160, 23, 0.45);
+}
+
+/* Casino chip badge */
+.casino-chip {
+  background: linear-gradient(135deg, var(--color-gold-light) 0%, var(--color-gold) 55%, var(--color-gold-dark) 100%);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.65);
+}
+
+/* Keyframe Animations (gentle, < 1 Hz pulsing, respects reduced motion) */
+@keyframes card-fly-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.88) rotate(-3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes round-sweep {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes turn-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 2px var(--color-gold), 0 0 10px rgba(212, 160, 23, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--color-gold-light), 0 0 18px rgba(243, 212, 120, 0.65);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(-12px) rotate(0deg) scale(0.9);
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(96px) rotate(220deg) scale(0.6);
+  }
+}
+
+.animate-card-play {
+  animation: card-fly-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-round-new {
+  animation: round-sweep 0.25s ease-out both;
+}
+
+.animate-turn-seat {
+  animation: turn-glow 2.2s ease-in-out infinite;
+}
+
+.animate-confetti {
+  animation: confetti-fall 1.75s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-card-play,
+  .animate-round-new,
+  .animate-turn-seat,
+  .animate-confetti {
+    animation: none !important;
+  }
 }

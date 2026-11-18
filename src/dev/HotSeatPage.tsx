@@ -7,7 +7,7 @@ import {
   cryptoRandomInt,
   parseCards,
   shuffleAndDeal,
-  XAM_BASELINE_V1,
+  XAM_BASELINE_V2,
   type GameAction,
   type GameEvent,
   type MatchState,
@@ -19,13 +19,13 @@ import { useSelectionStore } from '@/features/game/selectionStore'
 import { COMBINATION_LABEL, MOVE_ERROR_MESSAGE } from '@/features/game/labels'
 import { cn } from '@/lib/utils'
 
-const R = XAM_BASELINE_V1
+const R = XAM_BASELINE_V2
 
 function newMatch(previousWinner: number | null = null): MatchState {
-  const deal = shuffleAndDeal(R, cryptoRandomInt)
+  const deal = shuffleAndDeal({ players: 4, handSize: R.handSize }, cryptoRandomInt)
   return createMatchState(
     deal.hands.map((h) => h.map((c) => c.code)),
-    chooseFirstLeader(R, cryptoRandomInt, previousWinner),
+    chooseFirstLeader({ players: 4 }, cryptoRandomInt, previousWinner),
   )
 }
 
@@ -35,9 +35,13 @@ function describeEvent(e: GameEvent): string {
       return `Ghế ${e.seat} đánh ${COMBINATION_LABEL[e.combination.type]}: ${e.combination.cards.join(' ')}`
     case 'PASSED':
       return `Ghế ${e.seat} bỏ lượt`
+    case 'SAM_DECLARED':
+      return `🔥 Ghế ${e.seat} đã Báo Xâm! Đi trước`
     case 'ROUND_RESET':
       return `Hết vòng, ghế ${e.leadSeat} dẫn vòng mới`
     case 'MATCH_FINISHED':
+      if (e.endReason === 'THOI_2_CUOI') return `Ghế ${e.foulSeat} đánh 2 cuối nên bị xử thua (Thối 2)! Ghế ${e.winnerSeat} thắng!`
+      if (e.endReason === 'SAM_CAUGHT') return `Ghế ${e.winnerSeat} chặn đứng Báo Xâm của ghế ${e.foulSeat}! Ghế ${e.winnerSeat} thắng!`
       return `Ghế ${e.winnerSeat} thắng!`
   }
 }
@@ -55,6 +59,7 @@ export function HotSeatPage({ initialState }: { initialState?: MatchState }) {
 
   const seat = state.currentSeat
   const finished = state.status === 'FINISHED'
+  const canDeclareSam = !finished && state.samSeat == null && state.seats.every((s) => !s.hasPlayed)
   const hint = useMemo(() => (selected.length ? classify(parseCards(selected), R) : null), [selected])
 
   function act(action: GameAction) {
@@ -79,9 +84,9 @@ export function HotSeatPage({ initialState }: { initialState?: MatchState }) {
   return (
     <main className="mx-auto grid max-w-4xl gap-4 px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Bàn chơi thử 4 ghế (dev)</h1>
-        <Button variant="outline" size="sm" onClick={restart}>
-          Ván mới
+        <h1 className="font-display text-xl font-bold">Bàn chơi thử 4 ghế (dev)</h1>
+        <Button variant="gold" size="sm" onClick={restart}>
+          {finished ? 'Tiếp tục ván mới' : 'Ván mới'}
         </Button>
       </div>
 
@@ -89,19 +94,21 @@ export function HotSeatPage({ initialState }: { initialState?: MatchState }) {
         {state.seats.map((s, i) => {
           const passed = state.passedSeats.includes(i)
           const isTurn = !finished && i === seat
+          const isSam = state.samSeat === i
           return (
             <li
               key={i}
               aria-current={isTurn ? 'true' : undefined}
               className={cn(
-                'rounded-lg border bg-white p-3 text-sm',
-                isTurn ? 'border-gold ring-2 ring-gold' : 'border-slate-200',
+                'rounded-xl border bg-ivory p-3 text-sm',
+                isTurn ? 'border-gold ring-2 ring-gold' : 'border-card-border',
                 passed && 'opacity-60',
               )}
             >
               <p className="font-semibold">
                 Ghế {i}
                 {state.winnerSeat === i && ' 🏆'}
+                {isSam && <span className="ml-1.5 rounded bg-suit-red px-1.5 py-0.5 text-xs text-gold-light">🔥 Báo Xâm</span>}
               </p>
               <p className="text-slate-600">{s.hand.length} lá</p>
               <p className="text-xs text-slate-500">
@@ -112,14 +119,14 @@ export function HotSeatPage({ initialState }: { initialState?: MatchState }) {
                   !s.hasPlayed && 'Chưa đánh',
                 ]
                   .filter(Boolean)
-                  .join(' · ') || ' '}
+                  .join(' · ') || '\u00A0'}
               </p>
             </li>
           )
         })}
       </ol>
 
-      <section aria-label="Bài trên bàn" className="grid min-h-36 place-items-center rounded-xl bg-felt p-4">
+      <section aria-label="Bài trên bàn" className="casino-table-surface grid min-h-36 place-items-center rounded-2xl p-4">
         {state.currentTrick ? (
           <div className="grid justify-items-center gap-2">
             <p className="text-sm text-white/80">
@@ -156,6 +163,15 @@ export function HotSeatPage({ initialState }: { initialState?: MatchState }) {
             <Button variant="outline" onClick={() => act({ type: 'PASS', seat })}>
               Bỏ lượt
             </Button>
+            {canDeclareSam && (
+              <button
+                type="button"
+                onClick={() => act({ type: 'DECLARE_SAM', seat })}
+                className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-gold bg-gradient-to-b from-suit-red to-suit-red-dark px-4 py-2 text-sm font-extrabold text-gold-light shadow-sm hover:brightness-110"
+              >
+                🔥 Báo Xâm
+              </button>
+            )}
           </div>
           {error && (
             <p role="alert" className="text-sm text-red-600">

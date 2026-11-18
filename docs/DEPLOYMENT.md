@@ -14,7 +14,7 @@ Nothing here has been run against a real project yet: it needs your Supabase and
    npx supabase login
    npx supabase link --project-ref <project-ref>
    ```
-3. Push the schema. This applies `supabase/migrations/0001…0012` in order, including the `xam-baseline` v1 ruleset row:
+3. Push the schema. This applies `supabase/migrations/0001…0013` in order, including the `xam-baseline` v1 ruleset row:
    ```bash
    npx supabase db push
    ```

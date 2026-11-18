@@ -69,7 +69,12 @@ describe('chooseBotMove', () => {
           if (!r.ok) throw new Error(r.error)
           state = r.value.nextState
         }
-        expect(state.seats[state.winnerSeat!]!.hand).toHaveLength(0)
+        if (state.endReason === 'THOI_2_CUOI') {
+          expect(state.seats[state.foulSeat!]!.hand).toHaveLength(0)
+          expect(state.winnerSeat).not.toBe(state.foulSeat)
+        } else {
+          expect(state.seats[state.winnerSeat!]!.hand).toHaveLength(0)
+        }
       }
     }
   })

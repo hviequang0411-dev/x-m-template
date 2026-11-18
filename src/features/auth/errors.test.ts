@@ -3,7 +3,7 @@ import { authErrorMessage } from './errors'
 describe('authErrorMessage', () => {
   it('maps invalid credentials', () => {
     expect(authErrorMessage({ code: 'invalid_credentials', message: 'Invalid login credentials' })).toBe(
-      'Email hoặc mật khẩu không đúng',
+      'Tên đăng nhập hoặc mật khẩu không đúng',
     )
   })
 

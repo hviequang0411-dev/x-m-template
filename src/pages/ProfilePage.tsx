@@ -4,8 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FormField } from '@/components/FormField'
 import { useAuthStore } from '@/features/auth/store'
 import { fetchMyProfile, updateDisplayName, type Profile } from '@/features/profile/api'
+import { cn } from '@/lib/utils'
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'ready'; profile: Profile }
+
+function initialOf(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? trimmed[0]!.toUpperCase() : '?'
+}
 
 export function ProfilePage() {
   const userId = useAuthStore((s) => s.session?.user.id)
@@ -56,13 +62,21 @@ export function ProfilePage() {
 
   if (load.state === 'loading')
     return (
-      <p role="status" className="text-slate-500">
-        Đang tải…
-      </p>
+      <div role="status" className="grid gap-6">
+        <span className="sr-only">Đang tải…</span>
+        <div className="h-24 animate-pulse rounded-2xl border border-card-border bg-ivory" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="h-20 animate-pulse rounded-xl border border-card-border bg-ivory" />
+          <div className="h-20 animate-pulse rounded-xl border border-card-border bg-ivory" />
+          <div className="h-20 animate-pulse rounded-xl border border-card-border bg-ivory" />
+          <div className="h-20 animate-pulse rounded-xl border border-card-border bg-ivory" />
+        </div>
+        <div className="h-44 animate-pulse rounded-2xl border border-card-border bg-ivory" />
+      </div>
     )
   if (load.state === 'error')
     return (
-      <p role="alert" className="text-red-600">
+      <p role="alert" className="rounded-xl border border-suit-red/30 bg-red-50 p-4 text-sm font-medium text-suit-red">
         Không tải được hồ sơ. Vui lòng tải lại trang.
       </p>
     )
@@ -70,24 +84,49 @@ export function ProfilePage() {
   const { profile } = load
   const winRate = profile.matches_played ? Math.round((profile.matches_won / profile.matches_played) * 100) : 0
   const stats = [
-    ['Tổng điểm', profile.total_score.toString()],
-    ['Đã chơi', profile.matches_played.toString()],
-    ['Thắng', profile.matches_won.toString()],
-    ['Tỉ lệ thắng', `${winRate}%`],
-  ]
+    ['Tổng điểm', profile.total_score.toString(), true],
+    ['Đã chơi', profile.matches_played.toString(), false],
+    ['Thắng', profile.matches_won.toString(), false],
+    ['Tỉ lệ thắng', `${winRate}%`, false],
+  ] as const
 
   return (
     <div className="grid gap-6">
-      <section>
-        <h2 className="text-2xl font-semibold">{profile.display_name}</h2>
-        <p className="text-sm text-slate-500">@{profile.username}</p>
+      <section className="flex items-center gap-4 rounded-2xl border border-gold/45 bg-gradient-to-r from-felt-dark via-felt to-felt-dark p-5 text-ivory shadow-md sm:p-6">
+        <div
+          aria-hidden
+          className="flex size-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold font-display text-2xl font-bold text-wood-dark shadow-md ring-2 ring-gold-bright/50"
+        >
+          {initialOf(profile.display_name)}
+        </div>
+        <div className="min-w-0">
+          <h2 className="truncate font-display text-2xl font-bold text-gold-light sm:text-3xl">
+            {profile.display_name}
+          </h2>
+          <p className="text-sm text-ivory/75">@{profile.username}</p>
+        </div>
       </section>
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stats.map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white p-3">
-            <dt className="text-xs text-slate-500">{label}</dt>
-            <dd className="text-xl font-semibold tabular-nums">{value}</dd>
+      <dl className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        {stats.map(([label, value, highlight]) => (
+          <div
+            key={label}
+            className={cn(
+              'rounded-2xl border p-4 shadow-2xs',
+              highlight
+                ? 'border-gold/60 bg-gradient-to-br from-amber-50/90 to-ivory'
+                : 'border-card-border bg-ivory',
+            )}
+          >
+            <dt className="text-xs font-semibold tracking-wider text-slate-500 uppercase">{label}</dt>
+            <dd
+              className={cn(
+                'mt-1 text-2xl font-extrabold tabular-nums',
+                highlight ? 'text-wood-dark' : 'text-slate-900',
+              )}
+            >
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -113,7 +152,7 @@ export function ProfilePage() {
                 {saving ? 'Đang lưu…' : 'Lưu'}
               </Button>
               {message?.ok && (
-                <span role="status" className="text-sm text-emerald-700">
+                <span role="status" className="text-sm font-medium text-emerald-700">
                   {message.text}
                 </span>
               )}

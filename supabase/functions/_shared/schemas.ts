@@ -28,7 +28,7 @@ export const playCardsSchema = z
   })
   .strict()
 
-export const passTurnSchema = z.object(actionBase).strict()
+export const passTurnSchema = z.object({ ...actionBase, declareSam: z.boolean().optional() }).strict()
 
 export const claimTimeoutSchema = z.object(actionBase).strict()
 

@@ -23,7 +23,6 @@ async function register(browser: Browser, i: number): Promise<Player> {
   const page = await context.newPage()
   const name = `E2E ${i} ${RUN.slice(0, 4)}`
   await page.goto('/register')
-  await page.getByLabel('Email', { exact: true }).fill(`e2e_${RUN}_${i}@xam.test`)
   await page.getByLabel('Tên đăng nhập', { exact: true }).fill(`e2e_${RUN}_${i}`)
   await page.getByLabel('Tên hiển thị', { exact: true }).fill(name)
   await page.getByLabel('Mật khẩu', { exact: true }).fill(PASSWORD)

@@ -55,4 +55,32 @@ describe('calculateScores', () => {
     expect(() => calculateScores({ status: 'PLAYING', seats: s, winnerSeat: null }, R)).toThrow('MATCH_NOT_FINISHED')
     expect(() => calculateScores(finished(s, 1), R)).toThrow('WINNER_HAS_CARDS')
   })
+
+  it('scores Thối 2 cuối and Báo Xâm (SAM_CAUGHT / SAM_SUCCESS)', () => {
+    const thoi2Res = calculateScores(
+      {
+        status: 'FINISHED',
+        seats: [seat(''), seat('4S 5S')],
+        winnerSeat: 1,
+        foulSeat: 0,
+        endReason: 'THOI_2_CUOI',
+      },
+      R,
+    )
+    expect(thoi2Res.map((x) => x.scoreDelta)).toEqual([-15, 15])
+    expect(thoi2Res[0]!.penalties).toEqual({ thoi2: 1, thoi2Cuoi: true })
+
+    const samCaughtRes = calculateScores(
+      {
+        status: 'FINISHED',
+        seats: [seat('6S'), seat('AC'), seat('3D 4D')],
+        winnerSeat: 1,
+        foulSeat: 0,
+        endReason: 'SAM_CAUGHT',
+      },
+      R,
+    )
+    expect(samCaughtRes.map((x) => x.scoreDelta)).toEqual([-40, 40, 0])
+    expect(samCaughtRes[0]!.penalties).toEqual({ denSam: true })
+  })
 })
