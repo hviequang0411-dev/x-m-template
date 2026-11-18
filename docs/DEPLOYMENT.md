@@ -33,7 +33,7 @@ Nothing here has been run against a real project yet: it needs your Supabase and
 |---|---|
 | Site URL | the production app URL |
 | Redirect URLs | the production app URL (and preview URLs if you use them) |
-| Email confirmations | your choice. If on, registration shows "Đăng ký thành công · kiểm tra email" and the user logs in after confirming |
+| Confirm email (Authentication → Sign In / Providers → Email) | **OFF**. Accounts use internal `<username>@xam.local` emails that can never receive mail; with it on, sign-up fails or the account can never log in (`400` on `/token`) |
 | Rate limits | keep the defaults. The raised `sign_in_sign_ups = 1000` in `config.toml` is for local integration tests only |
 | Minimum password length | 8 (the client already requires 8) |
 

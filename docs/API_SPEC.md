@@ -32,13 +32,13 @@ Host leaves → the lowest occupied seat becomes host; the last one out closes t
 | `play-cards` | `{ actionId, matchId, expectedVersion, cards: ["3S", …] }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `CARD_NOT_OWNED`, `INVALID_COMBINATION`, `CANNOT_BEAT_CURRENT_PLAY`, `MATCH_NOT_ACTIVE` |
 | `pass-turn` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `VERSION_CONFLICT`, `NOT_YOUR_TURN`, `LEADER_CANNOT_PASS`, `MATCH_NOT_ACTIVE` |
 | `claim-timeout` | `{ actionId, matchId, expectedVersion }` | `{ version, state, duplicate? }` | `TURN_NOT_EXPIRED`, `VERSION_CONFLICT`, `MATCH_NOT_ACTIVE` |
-| `finish-match` | `{ matchId }` | `{ version, state }` (status `ABORTED`) | `NOT_ROOM_HOST`, `MATCH_NOT_STALLED`, `MATCH_NOT_ACTIVE` |
+| `finish-match` | `{ matchId }` | `{ version, state }` (status `ABORTED`) | `NOT_ROOM_HOST`, `MATCH_NOT_ACTIVE` |
 
 - `start-match` shuffles with crypto RNG and deals 10 cards each. The first match is led by a random seat, later matches by the
   previous winner's seat.
 - `claim-timeout`: any seated player, once `turnDeadline` (30 s per turn) has passed. The current seat auto-passes, or
   auto-plays its lowest single when leading (R27).
-- `finish-match` aborts only (never declares a winner): host only, after 5 minutes without a move (R30).
+- `finish-match` aborts only (never declares a winner): host only, at any time (R30, migration 0014).
 - When a play empties a hand the match ends in the same transaction: `match_results` and profile totals are written once.
 
 - Ruleset v2: 2–4 seated players start; match seats are re-numbered 0…n−1. A match with a bot is `ranked: false`: no

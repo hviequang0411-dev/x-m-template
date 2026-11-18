@@ -58,7 +58,7 @@ Báo Sâm, báo 1 + đền, instant wins (tới trắng), chain bombing (chặt 
 20. **Turn timeout 30 s.** When it expires the player auto-PASSes; if they are the leader, the server auto-plays their lowest single. Any member may trigger `claim-timeout` after the deadline. [R27]
 21. A disconnected player keeps their seat; the timer keeps running. Reconnecting restores the authoritative state. [R28]
 22. Leaving mid-match is a forfeit, scored as cóng; the seat auto-passes for the rest of the match. [R29]
-23. `finish-match` only **aborts** a match (host, with all players agreeing or after a 5-minute stall). It never declares a winner. [R30]
+23. `finish-match` only **aborts** a match (host only, at any time). It never declares a winner. [R30]
 24. After a match the room returns to WAITING with the same seats. [R31]
 25. Rooms are private and joined by a 6-character code. There is no public room list. [R32]
 26. A room is CLOSED by the host or after 30 minutes with no members. If the host leaves, the lowest occupied seat becomes host. [R33]

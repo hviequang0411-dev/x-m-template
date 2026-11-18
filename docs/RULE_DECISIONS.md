@@ -73,7 +73,7 @@ Legend: **Blocks** = earliest sprint day that cannot be completed without the an
 | R27 | **Turn timeout** | 30 s per turn. When it runs out the player auto-PASSes; if they are the leader, the server auto-plays their lowest single. Done server-side through a `claim-timeout` call that any member can trigger once the deadline has passed. | APPROVED |
 | R28 | **Disconnect** | The seat is kept; the turn timer keeps running (R27). The player can reconnect and pick up the authoritative state. | APPROVED |
 | R29 | **Leaving mid-match** | Counts as a forfeit: scored as cóng (R18). The match continues with auto-pass on that seat. | APPROVED |
-| R30 | **What `finish-match` is for** | Not for declaring a winner (the server detects that inside `play-cards`). Used only by the host to **abort** a match (all players must agree, or the match has been stalled > 5 min), and by the system to finalise results. | APPROVED |
+| R30 | **What `finish-match` is for** | Not for declaring a winner (the server detects that inside `play-cards`). Used only by the host to **abort** a match (at any time; the earlier "all agree or stalled > 5 min" condition was dropped in migration 0014), and by the system to finalise results. | APPROVED |
 | R31 | **After a match** | The room goes back to `WAITING` with the same seats; the host can start the next match. | APPROVED |
 | R32 | **Lobby visibility** | Private rooms only: joined by 6-character code, no public room list. | APPROVED |
 | R33 | **Room close** | The room is `CLOSED` when the host closes it or after 30 min with no members. Host leaves → host passes to the lowest occupied seat. | APPROVED |

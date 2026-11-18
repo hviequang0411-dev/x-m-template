@@ -225,8 +225,8 @@ Notes on the Day 6 RPCs:
   with the right JSON type.
 - **Timeout claims** (R27): any seated player may send `TIMEOUT_*` once `turn_deadline < now()` (database clock); the action is
   logged for the seat whose turn it was. Early claims → `TURN_NOT_EXPIRED`.
-- **Abort** (R30): host only, only when the last action is older than 5 minutes (`MATCH_NOT_STALLED` otherwise); status `ABORTED`,
-  no results, room back to `WAITING`. Abort by agreement of all players is not implemented.
+- **Abort** (R30): host only, at any time (the 5-minute stall condition was removed in 0014); status `ABORTED`,
+  no results, room back to `WAITING`.
 
 Notes on the Day 5 RPCs:
 - `start_match` starts at `version = 1` (the DEAL action is `version_after = 1`); every action adds 1.

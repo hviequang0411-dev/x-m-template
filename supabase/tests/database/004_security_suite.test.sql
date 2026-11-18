@@ -2,7 +2,7 @@
 -- (results, timeout, abort) enforce their rules.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(62);
 
 -- 1. No client write privilege on any game table, for any operation --------------------------------
 select ok(not has_table_privilege(r, 'public.' || t, op), format('%s has no %s on %s', r, op, t))
@@ -142,11 +142,9 @@ insert into ids select 'match2', (public.start_match('e0000001-0000-0000-0000-00
   3::smallint) ->> 'matchId')::uuid;
 select throws_ok(format($$ select public.finish_match('e0000002-0000-0000-0000-000000000000', %L) $$, (select v from ids where k = 'match2')),
   'P0001', 'NOT_ROOM_HOST', 'only the host may abort');
-select throws_ok(format($$ select public.finish_match('e0000001-0000-0000-0000-000000000000', %L) $$, (select v from ids where k = 'match2')),
-  'P0001', 'MATCH_NOT_STALLED', 'a match with a recent move cannot be aborted');
-update public.game_actions set created_at = now() - interval '6 minutes' where match_id = (select v from ids where k = 'match2');
+-- 0014: the host may abort at any time, even right after a move [R30].
 select is((public.finish_match('e0000001-0000-0000-0000-000000000000', (select v from ids where k = 'match2')) ->> 'status'),
-  'ABORTED', 'a stalled match can be aborted by the host');
+  'ABORTED', 'the host can abort a match at any time');
 select is((select count(*)::int from public.match_results where match_id = (select v from ids where k = 'match2')), 0,
   'an aborted match scores nothing');
 

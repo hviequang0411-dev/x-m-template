@@ -443,163 +443,65 @@ export function GameTablePage() {
           ))}
         </ol>
 
-        {/* Center Arena + Right-Side Frosted Glass Move History Panel */}
-        <div className="relative z-10 grid flex-1 items-center gap-3 lg:grid-cols-[1fr_16.5rem]">
-          {/* Center Felt Arena (`Bài trên bàn`) with Centered Frosted-Glass Notifications */}
-          <section
-            aria-label="Bài trên bàn"
-            className="casino-felt-ring relative flex min-h-48 flex-col items-center justify-center gap-3 rounded-[2rem] bg-felt-dark/40 px-3 py-5 sm:min-h-60 sm:px-6 lg:min-h-68"
+        {/* Center Felt Arena (`Bài trên bàn`) with Compact Left-Corner History & Centered Frosted-Glass Notifications */}
+        <section
+          aria-label="Bài trên bàn"
+          className="casino-felt-ring relative z-10 flex min-h-52 flex-1 flex-col items-center justify-center gap-3 rounded-[2rem] bg-felt-dark/40 px-3 py-5 sm:min-h-64 sm:px-6 lg:min-h-72"
+        >
+          {/* Ornate Center Casino Crest Watermark */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none"
           >
-            {/* Ornate Center Casino Crest Watermark */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none"
-            >
-              <div className="flex flex-col items-center justify-center rounded-full border border-gold/12 px-10 py-6">
-                <span className="font-display text-xs tracking-[0.35em] text-gold-light/15 uppercase sm:text-base">
-                  ♠ Xâm Online ♠
-                </span>
-                <span className="mt-1 text-[10px] tracking-[0.2em] text-gold-light/10 uppercase">
-                  Royal Casino Club
-                </span>
-              </div>
+            <div className="flex flex-col items-center justify-center rounded-full border border-gold/12 px-10 py-6">
+              <span className="font-display text-xs tracking-[0.35em] text-gold-light/15 uppercase sm:text-base">
+                ♠ Xâm Online ♠
+              </span>
+              <span className="mt-1 text-[10px] tracking-[0.2em] text-gold-light/10 uppercase">
+                Royal Casino Club
+              </span>
             </div>
+          </div>
 
-            {/* Active Báo Xâm Alert (Frosted Glass in Center of Table) */}
-            {samPlayer && !finished && (
-              <div className="z-10 flex items-center gap-2 rounded-full border border-gold/70 bg-suit-red-dark/75 px-4 py-1 text-center text-xs font-bold text-gold-light shadow-lg backdrop-blur-md sm:text-sm">
-                <span aria-hidden>🔥</span>
-                <span>
-                  {samPlayer.userId === userId ? 'Bạn' : samPlayer.displayName} đã <strong>BÁO XÂM</strong> (đi trước · ai chặn được thắng ngay!)
-                </span>
-              </div>
-            )}
-
-            {/* Center Played Trick or New Round Notice */}
-            {match.currentTrick ? (
-              <div key={match.version} className="z-10 grid justify-items-center gap-3">
-                <p className="rounded-full border border-gold/40 bg-black/45 px-4 py-1 text-xs font-semibold text-gold-light shadow-md backdrop-blur-md sm:text-sm">
-                  {match.seats[match.leadSeat]?.displayName} · {COMBINATION_LABEL[match.currentTrick.type]}
-                </p>
-                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2.5">
-                  {parseCards(match.currentTrick.cards).map((c) => (
-                    <PlayingCard key={`${match.version}-${c.code}`} card={c} className="animate-card-play shadow-xl" />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              !finished && (
-                <div key={`round-${match.leadSeat}-${match.version}`} className="animate-round-new z-10 grid justify-items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="inline-flex size-9 items-center justify-center rounded-full border border-gold/35 bg-black/35 text-base text-gold-light backdrop-blur-md"
-                  >
-                    ✦
-                  </span>
-                  <p className="rounded-full border border-gold/40 bg-black/45 px-5 py-1.5 text-center text-xs font-semibold text-ivory shadow-md backdrop-blur-md sm:text-sm">
-                    Vòng mới · {turnName} đánh trước
-                  </p>
-                </div>
-              )
-            )}
-
-            {/* Centered Frosted-Glass Turn / Combination / Warning / Error Notification HUD */}
-            {me && !finished && (
-              <div className="z-10 mt-1 flex flex-col items-center gap-1.5">
-                <p
-                  className={cn(
-                    'rounded-full border px-4 py-1 text-center text-xs font-semibold shadow-sm backdrop-blur-md transition-all sm:text-sm',
-                    isLastPlayTwoWarning
-                      ? 'border-red-400/70 bg-red-950/75 font-bold text-red-200'
-                      : selected.length > 0
-                        ? hint
-                          ? 'border-gold/60 bg-black/50 text-gold-light'
-                          : 'border-red-400/60 bg-red-950/65 text-red-200'
-                        : myTurn
-                          ? 'border-gold/40 bg-black/45 text-gold-light'
-                          : 'border-white/15 bg-black/30 text-ivory/80',
-                  )}
-                  aria-live="polite"
-                >
-                  {isLastPlayTwoWarning
-                    ? `⚠ Cảnh báo: Đánh ${COMBINATION_LABEL[hint!.type]} 2 cuối cùng sẽ bị xử thua (Thối 2)!`
-                    : selected.length === 0
-                      ? myTurn
-                        ? leading
-                          ? 'Bạn dẫn vòng: đánh bộ bất kỳ'
-                          : 'Chọn bộ lớn hơn để chặn, hoặc bỏ lượt'
-                        : `Đang chờ ${turnName} suy nghĩ…`
-                      : hint
-                        ? `${COMBINATION_LABEL[hint.type]} (${hint.size} lá)`
-                        : 'Chưa phải bộ hợp lệ'}
-                </p>
-
-                {error && (
-                  <p
-                    role="alert"
-                    className="rounded-full border border-red-400/60 bg-red-950/80 px-4 py-1 text-center text-xs font-semibold text-red-200 shadow-md backdrop-blur-md sm:text-sm"
-                  >
-                    {error}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Centered Frosted-Glass Spectator Banner */}
-            {!me && !finished && (
-              <p
-                role="status"
-                className="z-10 max-w-md rounded-2xl border border-gold/40 bg-black/50 px-5 py-3 text-center text-sm font-medium text-ivory shadow-lg backdrop-blur-md"
-              >
-                Bạn đang xem ván này. Bạn sẽ được vào chơi từ ván sau khi có ghế trống.
-              </p>
-            )}
-          </section>
-
-          {/* Right-Side Frosted Glass Mini Action History Panel (`Lịch sử đánh`) */}
+          {/* Compact Frosted-Glass Mini History in the Left Corner */}
           <aside
             aria-label="Diễn biến ván"
-            className="flex max-h-40 flex-col rounded-2xl border border-gold/25 bg-black/35 p-3 text-xs text-ivory/90 shadow-lg backdrop-blur-md lg:h-full lg:max-h-68"
+            className="z-20 flex max-h-24 w-44 flex-col rounded-xl border border-gold/20 bg-black/35 p-2 text-[11px] text-ivory/85 shadow-md backdrop-blur-md sm:absolute sm:bottom-3 sm:left-3 sm:max-h-32 sm:w-52"
           >
-            <div className="mb-2 flex items-center justify-between border-b border-gold/20 pb-1.5">
-              <span className="font-display text-xs font-bold tracking-wide text-gold-light uppercase">
-                📜 Diễn biến ván
+            <div className="mb-1 flex items-center justify-between border-b border-gold/15 pb-1">
+              <span className="font-display text-[10px] font-bold tracking-wider text-gold-light/90 uppercase">
+                📜 Diễn biến
               </span>
-              <span className="rounded-full bg-white/10 px-2 py-0.2 text-[10px] font-semibold tabular-nums text-ivory/75">
+              <span className="rounded-full bg-white/10 px-1.5 text-[9px] font-semibold tabular-nums text-ivory/70">
                 #{match.version}
               </span>
             </div>
 
             {actionLog.length === 0 ? (
-              <p className="my-auto text-center text-ivory/50">Ván mới bắt đầu…</p>
+              <p className="my-auto text-center text-[10px] text-ivory/50">Ván mới…</p>
             ) : (
-              <ul className="grid gap-1.5 overflow-y-auto pr-1">
-                {actionLog.map((item) => {
+              <ul className="grid gap-1 overflow-y-auto pr-0.5">
+                {actionLog.slice(0, 6).map((item) => {
                   const seatName =
-                    item.seat !== null ? (match.seats[item.seat]?.displayName ?? `Ghế ${item.seat + 1}`) : 'Hệ thống'
+                    item.seat !== null ? (match.seats[item.seat]?.displayName ?? `Ghế ${item.seat + 1}`) : 'Bàn'
                   return (
                     <li
                       key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-1.5 rounded-lg border border-white/8 bg-white/5 px-2.5 py-1.5"
+                      className="flex flex-wrap items-center justify-between gap-1 rounded bg-white/5 px-1.5 py-0.5 leading-tight"
                     >
-                      <span className="truncate font-semibold text-gold-light/95">{seatName}</span>
+                      <span className="max-w-20 truncate font-semibold text-gold-light/95">{seatName}</span>
                       {item.kind === 'PLAY' && item.cards ? (
-                        <span className="flex flex-wrap items-center gap-1">
-                          {item.combination && (
-                            <span className="text-[11px] text-ivory/75">{COMBINATION_LABEL[item.combination]}:</span>
-                          )}
-                          <MiniCardChips cards={item.cards} />
-                        </span>
+                        <MiniCardChips cards={item.cards} />
                       ) : item.kind === 'PASS' ? (
-                        <span className="rounded bg-white/10 px-1.5 py-0.2 text-[11px] text-ivory/70">Bỏ lượt</span>
+                        <span className="text-[10px] text-ivory/65">Bỏ lượt</span>
                       ) : item.kind === 'DECLARE_SAM' ? (
-                        <span className="rounded bg-suit-red px-1.5 py-0.2 text-[11px] font-bold text-gold-light">
+                        <span className="rounded bg-suit-red px-1 text-[10px] font-bold text-gold-light">
                           🔥 Báo Xâm
                         </span>
                       ) : item.kind === 'ROUND_RESET' ? (
-                        <span className="text-[11px] text-emerald-300">✦ Dẫn vòng mới</span>
+                        <span className="text-[10px] text-emerald-300">✦ Vòng mới</span>
                       ) : (
-                        <span className="text-[11px] text-ivory/65">Chia bài</span>
+                        <span className="text-[10px] text-ivory/60">Chia bài</span>
                       )}
                     </li>
                   )
@@ -607,7 +509,97 @@ export function GameTablePage() {
               </ul>
             )}
           </aside>
-        </div>
+
+          {/* Active Báo Xâm Alert (Frosted Glass in Center of Table) */}
+          {samPlayer && !finished && (
+            <div className="z-10 flex items-center gap-2 rounded-full border border-gold/70 bg-suit-red-dark/75 px-4 py-1 text-center text-xs font-bold text-gold-light shadow-lg backdrop-blur-md sm:text-sm">
+              <span aria-hidden>🔥</span>
+              <span>
+                {samPlayer.userId === userId ? 'Bạn' : samPlayer.displayName} đã <strong>BÁO XÂM</strong> (đi trước · ai chặn được thắng ngay!)
+              </span>
+            </div>
+          )}
+
+          {/* Center Played Trick or New Round Notice */}
+          {match.currentTrick ? (
+            <div key={match.version} className="z-10 grid justify-items-center gap-3">
+              <p className="rounded-full border border-gold/40 bg-black/45 px-4 py-1 text-xs font-semibold text-gold-light shadow-md backdrop-blur-md sm:text-sm">
+                {match.seats[match.leadSeat]?.displayName} · {COMBINATION_LABEL[match.currentTrick.type]}
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2.5">
+                {parseCards(match.currentTrick.cards).map((c) => (
+                  <PlayingCard key={`${match.version}-${c.code}`} card={c} className="animate-card-play shadow-xl" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            !finished && (
+              <div key={`round-${match.leadSeat}-${match.version}`} className="animate-round-new z-10 grid justify-items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-flex size-9 items-center justify-center rounded-full border border-gold/35 bg-black/35 text-base text-gold-light backdrop-blur-md"
+                >
+                  ✦
+                </span>
+                <p className="rounded-full border border-gold/40 bg-black/45 px-5 py-1.5 text-center text-xs font-semibold text-ivory shadow-md backdrop-blur-md sm:text-sm">
+                  Vòng mới · {turnName} đánh trước
+                </p>
+              </div>
+            )
+          )}
+
+          {/* Centered Frosted-Glass Turn / Combination / Warning / Error Notification HUD */}
+          {me && !finished && (
+            <div className="z-10 mt-1 flex flex-col items-center gap-1.5">
+              <p
+                className={cn(
+                  'rounded-full border px-4 py-1 text-center text-xs font-semibold shadow-sm backdrop-blur-md transition-all sm:text-sm',
+                  isLastPlayTwoWarning
+                    ? 'border-red-400/70 bg-red-950/75 font-bold text-red-200'
+                    : selected.length > 0
+                      ? hint
+                        ? 'border-gold/60 bg-black/50 text-gold-light'
+                        : 'border-red-400/60 bg-red-950/65 text-red-200'
+                      : myTurn
+                        ? 'border-gold/40 bg-black/45 text-gold-light'
+                        : 'border-white/15 bg-black/30 text-ivory/80',
+                )}
+                aria-live="polite"
+              >
+                {isLastPlayTwoWarning
+                  ? `⚠ Cảnh báo: Đánh ${COMBINATION_LABEL[hint!.type]} 2 cuối cùng sẽ bị xử thua (Thối 2)!`
+                  : selected.length === 0
+                    ? myTurn
+                      ? leading
+                        ? 'Bạn dẫn vòng: đánh bộ bất kỳ'
+                        : 'Chọn bộ lớn hơn để chặn, hoặc bỏ lượt'
+                      : `Đang chờ ${turnName} suy nghĩ…`
+                    : hint
+                      ? `${COMBINATION_LABEL[hint.type]} (${hint.size} lá)`
+                      : 'Chưa phải bộ hợp lệ'}
+              </p>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-full border border-red-400/60 bg-red-950/80 px-4 py-1 text-center text-xs font-semibold text-red-200 shadow-md backdrop-blur-md sm:text-sm"
+                >
+                  {error}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Centered Frosted-Glass Spectator Banner */}
+          {!me && !finished && (
+            <p
+              role="status"
+              className="z-10 max-w-md rounded-2xl border border-gold/40 bg-black/50 px-5 py-3 text-center text-sm font-medium text-ivory shadow-lg backdrop-blur-md"
+            >
+              Bạn đang xem ván này. Bạn sẽ được vào chơi từ ván sau khi có ghế trống.
+            </p>
+          )}
+        </section>
 
         {/* My Seat & Hand Dock at the Bottom of the Table */}
         {me && !finished && (

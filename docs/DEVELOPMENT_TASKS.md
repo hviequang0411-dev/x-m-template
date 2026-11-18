@@ -188,7 +188,7 @@ Found and fixed while testing:
 
 Not done (documented limitations):
 - **R29 forfeit on leaving mid-match** is not implemented: leaving during a match is refused (`MATCH_IN_PROGRESS`); an absent player is auto-passed by the turn timeout instead.
-- **R30 abort by agreement of all players** is not implemented; only the 5-minute stall abort exists.
+- **R30 abort**: since migration 0014 the host can abort at any time (no 5-minute stall condition, no vote).
 
 Tests: 301 unit tests, 150 pgTAP assertions, 23 integration tests.
 
