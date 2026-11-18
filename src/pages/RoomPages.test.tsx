@@ -429,6 +429,12 @@ describe('Game table', () => {
     await waitFor(() => expect(match.claimTimeout).toHaveBeenCalledWith('m1', 5), { timeout: 3000 })
   })
 
+  it('clamps skewed server turn deadlines to the 30s turn limit', async () => {
+    match.fetchMatch.mockResolvedValue(view({ currentSeat: 3, turnDeadline: new Date(Date.now() + 5000_000).toISOString() }))
+    renderAt('/match/m1')
+    expect(await screen.findByText('Người 3 còn 30s')).toBeInTheDocument()
+  })
+
   it('shows who is online and the 1-card warning', async () => {
     match.fetchMatch.mockResolvedValue(view({ seats: view().seats.map((s) => (s.seat === 3 ? { ...s, cardCount: 1 } : s)) }))
     renderAt('/match/m1')

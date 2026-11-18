@@ -50,16 +50,22 @@ const TURN_SECONDS_MAX = 30
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'gone' } | { state: 'ready'; match: MatchView }
 
-/** Whole seconds left until `deadline`, ticking every 250 ms. Null without a deadline. */
+/** Whole seconds left until `deadline`, ticking every 250 ms and clamped to 0..TURN_SECONDS_MAX. */
 function useSecondsLeft(deadline: string | null): number | null {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!deadline) return
+    const sync = setTimeout(() => setNow(Date.now()), 0)
     const id = setInterval(() => setNow(Date.now()), 250)
-    return () => clearInterval(id)
+    return () => {
+      clearTimeout(sync)
+      clearInterval(id)
+    }
   }, [deadline])
   if (!deadline) return null
-  return Math.max(0, Math.ceil((Date.parse(deadline) - now) / 1000))
+  const ms = Date.parse(deadline)
+  if (Number.isNaN(ms)) return null
+  return Math.min(TURN_SECONDS_MAX, Math.max(0, Math.ceil((ms - now) / 1000)))
 }
 
 /** Deterministic subtle rotation angle based strictly on card code (zero random flicker). */
@@ -131,6 +137,7 @@ export function GameTablePage() {
   const selected = useSelectionStore((s) => s.selected)
   const clearSelection = useSelectionStore((s) => s.clear)
   const versionRef = useRef(0)
+  const deadlineByVersionRef = useRef<{ matchId: string; version: number; raw: string; normalized: string } | null>(null)
   const tableRef = useRef<HTMLDivElement | null>(null)
   const targetRefs = useRef<Map<string, HTMLElement | null>>(new Map())
   const chopTimerRef = useRef<number | null>(null)
@@ -155,7 +162,40 @@ export function GameTablePage() {
     setStartingNext(false)
     if (result === 'error') return setLoad({ state: 'error' })
     if (!result.match) return setLoad({ state: 'gone' })
-    const m = result.match
+    const raw = result.match
+    let m = raw
+    if (raw.status === 'PLAYING' && raw.turnDeadline) {
+      const cached = deadlineByVersionRef.current
+      let normalized: string
+      if (
+        cached &&
+        cached.matchId === raw.matchId &&
+        cached.version === raw.version &&
+        cached.raw === raw.turnDeadline
+      ) {
+        normalized = cached.normalized
+      } else {
+        const now = Date.now()
+        const parsed = Date.parse(raw.turnDeadline)
+        const diff = parsed - now
+        if (!Number.isNaN(parsed) && (diff > TURN_SECONDS_MAX * 1000 || diff < -60_000)) {
+          normalized = new Date(now + TURN_SECONDS_MAX * 1000).toISOString()
+        } else {
+          normalized = raw.turnDeadline
+        }
+        deadlineByVersionRef.current = {
+          matchId: raw.matchId,
+          version: raw.version,
+          raw: raw.turnDeadline,
+          normalized,
+        }
+      }
+      if (normalized !== raw.turnDeadline) {
+        m = { ...raw, turnDeadline: normalized }
+      }
+    } else {
+      deadlineByVersionRef.current = null
+    }
     versionRef.current = m.version
     setLoad({ state: 'ready', match: m })
     setHand(result.myHand)
