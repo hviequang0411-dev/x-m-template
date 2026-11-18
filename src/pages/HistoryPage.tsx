@@ -47,9 +47,9 @@ export function HistoryPage() {
 
   return (
     <div className="grid gap-5">
-      <div className="grid gap-1">
-        <h2 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">Lịch sử ván</h2>
-        <p className="text-sm text-slate-600">Kết quả các ván tính điểm đã hoàn thành gần đây.</p>
+      <div className="rounded-2xl border border-gold/35 bg-gradient-to-r from-felt-dark via-felt to-felt-dark px-5 py-4 text-ivory shadow-md">
+        <h2 className="font-display text-2xl font-bold text-gold-light sm:text-3xl">Lịch sử ván</h2>
+        <p className="text-sm text-ivory/80">Kết quả các ván tính điểm đã hoàn thành gần đây.</p>
       </div>
 
       {load.entries.length === 0 ? (

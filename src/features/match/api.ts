@@ -21,6 +21,7 @@ export interface SeatView {
   status: 'PLAYING' | 'WON' | 'LOST' | 'FORFEITED'
   isBot: boolean
   avatarId?: string | null
+  points?: number
 }
 
 /** Public match state: the same shape as the `state` broadcast (plus display names). */
@@ -68,7 +69,7 @@ interface MatchRow {
     card_count: number
     has_played: boolean
     status: SeatView['status']
-    profile: { display_name: string; is_bot: boolean; avatar_id?: string | null } | null
+    profile: { display_name: string; is_bot: boolean; avatar_id?: string | null; total_score?: number } | null
   }[]
 }
 
@@ -153,6 +154,7 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
         status: p.status,
         isBot: p.profile?.is_bot ?? false,
         avatarId: p.profile?.avatar_id ?? null,
+        ...(typeof p.profile?.total_score === 'number' ? { points: p.profile.total_score } : {}),
       })),
   }
 }

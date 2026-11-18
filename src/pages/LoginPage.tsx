@@ -45,7 +45,7 @@ export function LoginPage() {
           )}
         </CardContent>
         <CardFooter className="flex-col gap-3">
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" variant="gold" className="w-full font-bold shadow-md" disabled={submitting}>
             {submitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
           </Button>
           <p className="text-sm text-slate-600">

@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { classify, parseCards, seatAfter, XAM_BASELINE_V2, type CardCode } from '@engine'
+import { classify, parseCards, seatAfter, XAM_BASELINE_V2, type CardCode, type Combination } from '@engine'
 import { Button } from '@/components/ui/button'
 import { ConnectionBadge } from '@/components/ConnectionBadge'
 import { Avatar } from '@/components/Avatar'
 import { ChatPanel, type ChatPerson } from '@/components/chat/ChatPanel'
 import { EmoteBar } from '@/components/chat/EmoteBar'
 import { EmoteBubble } from '@/components/chat/EmoteBubble'
-import { useRoomChat, type EmoteBubbleState } from '@/features/chat/useRoomChat'
+import { useRoomChat } from '@/features/chat/useRoomChat'
 import { Hand } from '@/components/cards/Hand'
 import { RANK_LABEL, SUIT_SYMBOL } from '@/components/cards/cardLabels'
-import { CardBackStack, PlayingCard } from '@/components/cards/PlayingCard'
+import { PlayingCard } from '@/components/cards/PlayingCard'
 import { useAuthStore } from '@/features/auth/store'
 import { useSelectionStore } from '@/features/game/selectionStore'
 import { useProfileStore } from '@/features/profile/store'
 import { COMBINATION_LABEL } from '@/features/game/labels'
+import { useDealAnimation } from '@/features/game/effects/useDealAnimation'
+import { CardFlightLayer } from '@/features/game/effects/CardFlightLayer'
+import { ChopBurst } from '@/features/game/effects/ChopBurst'
+import { SeatBadge } from '@/features/game/components/SeatBadge'
+import { ResultsModal } from '@/features/game/components/ResultsModal'
 import {
   abortMatch,
   claimTimeout,
@@ -45,17 +50,6 @@ const TURN_SECONDS_MAX = 30
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'gone' } | { state: 'ready'; match: MatchView }
 
-const CONFETTI_PIECES = [
-  { left: '12%', delay: '0s', bg: 'bg-gold' },
-  { left: '24%', delay: '0.12s', bg: 'bg-gold-light' },
-  { left: '36%', delay: '0.05s', bg: 'bg-emerald-400' },
-  { left: '48%', delay: '0.18s', bg: 'bg-gold' },
-  { left: '60%', delay: '0.08s', bg: 'bg-suit-red' },
-  { left: '72%', delay: '0.15s', bg: 'bg-gold-light' },
-  { left: '84%', delay: '0.03s', bg: 'bg-emerald-400' },
-  { left: '92%', delay: '0.2s', bg: 'bg-gold' },
-]
-
 /** Whole seconds left until `deadline`, ticking every 250 ms. Null without a deadline. */
 function useSecondsLeft(deadline: string | null): number | null {
   const [now, setNow] = useState(() => Date.now())
@@ -66,6 +60,29 @@ function useSecondsLeft(deadline: string | null): number | null {
   }, [deadline])
   if (!deadline) return null
   return Math.max(0, Math.ceil((Date.parse(deadline) - now) / 1000))
+}
+
+/** Deterministic subtle rotation angle based strictly on card code (zero random flicker). */
+function cardTiltDeg(code: string): number {
+  let h = 0
+  for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) % 97
+  return Number((((h % 9) - 4) * 0.85).toFixed(2))
+}
+
+/** Vector offset from a seat position toward or away from center table for flight & sweep effects. */
+function seatVectorOffset(
+  seat: number,
+  meSeat: number | undefined,
+  order: readonly SeatView[],
+): { x: string; y: string } {
+  if (meSeat !== undefined && seat === meSeat) return { x: '0px', y: '115px' }
+  const idx = order.findIndex((s) => s.seat === seat)
+  const total = order.length
+  if (total <= 1 || idx === -1) return { x: '0px', y: '-110px' }
+  if (total === 2) return idx === 0 ? { x: '135px', y: '-80px' } : { x: '-135px', y: '-80px' }
+  if (idx === 0) return { x: '175px', y: '-35px' }
+  if (idx === 1) return { x: '0px', y: '-115px' }
+  return { x: '-175px', y: '-35px' }
 }
 
 function MiniCardChips({ cards }: { cards: readonly CardCode[] }) {
@@ -105,12 +122,22 @@ export function GameTablePage() {
   const [confirmAbort, setConfirmAbort] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [emotesOpen, setEmotesOpen] = useState(false)
-  /** Last chat message id the player has seen (for the unread badge). */
   const [seenChatId, setSeenChatId] = useState(0)
+  const [chopBurst, setChopBurst] = useState(false)
+  const [sweptTrick, setSweptTrick] = useState<{ cards: readonly CardCode[]; toX: string; toY: string; key: number } | null>(
+    null,
+  )
+
   const selected = useSelectionStore((s) => s.selected)
   const clearSelection = useSelectionStore((s) => s.clear)
   const versionRef = useRef(0)
+  const tableRef = useRef<HTMLDivElement | null>(null)
+  const targetRefs = useRef<Map<string, HTMLElement | null>>(new Map())
+  const chopTimerRef = useRef<number | null>(null)
+  const sweepTimerRef = useRef<number | null>(null)
+
   const refreshProfile = useProfileStore((s) => s.refresh)
+  const profilePoints = useProfileStore((s) => s.profile?.total_score)
 
   /** Server state is replaced wholesale; the hand is re-read on every new version (never broadcast). */
   const fetchState = useCallback(
@@ -192,7 +219,6 @@ export function GameTablePage() {
 
   const match = load.state === 'ready' ? load.match : null
   const chat = useRoomChat(match?.roomId ?? null)
-  // Presence on the room topic + auto-navigate when the next match starts in this room!
   const { online } = useTopic(
     match ? `room:${match.roomId}` : null,
     (event, payload) => {
@@ -205,6 +231,9 @@ export function GameTablePage() {
     { presenceKey: userId },
   )
 
+  // Deal animation (once per matchId)
+  const deal = useDealAnimation(matchId, match?.status, match?.version, match?.seats.length ?? 0)
+
   // Turn timeout [R27]: once the deadline passes, any open client claims it. The server decides.
   const playing = match?.status === 'PLAYING'
   const deadline = playing ? match.turnDeadline : null
@@ -214,13 +243,13 @@ export function GameTablePage() {
     const wait = Date.parse(deadline) - Date.now() + CLAIM_GRACE_MS + Math.random() * CLAIM_JITTER_MS
     const id = setTimeout(() => {
       void claimTimeout(matchId, version)
-        .catch(() => {}) // VERSION_CONFLICT / TURN_NOT_EXPIRED: someone else moved or claimed first
+        .catch(() => {})
         .then(refresh)
     }, Math.max(0, wait))
     return () => clearTimeout(id)
   }, [deadline, version, matchId, refresh])
 
-  // The balance in the header changes when a ranked match ends.
+  // Refresh profile points after finished match.
   const finishedNow = match?.status === 'FINISHED'
   useEffect(() => {
     if (finishedNow && userId) void refreshProfile(userId)
@@ -229,9 +258,9 @@ export function GameTablePage() {
   const secondsLeft = useSecondsLeft(deadline)
   const hint = useMemo(() => (selected.length ? classify(parseCards(selected), R) : null), [selected])
 
-  // Sound cues driven by state transitions (purely decorative)
+  // Sound cues & state transition visual effects
   const prevVersionRef = useRef<number | null>(null)
-  const prevTrickKeyRef = useRef<string | null>(null)
+  const prevTrickRef = useRef<Combination | null>(null)
   const prevPassedCountRef = useRef<number>(0)
   const prevMyTurnRef = useRef<boolean>(false)
   const prevStatusRef = useRef<string | null>(null)
@@ -241,29 +270,64 @@ export function GameTablePage() {
     const meSeat = match.seats.find((s) => s.userId === userId)
     const isMyTurnNow = match.status === 'PLAYING' && meSeat?.seat === match.currentSeat
     const trickKey = match.currentTrick ? match.currentTrick.cards.join(',') : null
+    const prevTrick = prevTrickRef.current
+    const prevTrickKey = prevTrick ? prevTrick.cards.join(',') : null
 
-    if (prevVersionRef.current === null) {
-      if (match.status === 'PLAYING') playSound('deal')
-    } else if (match.version !== prevVersionRef.current) {
+    const turnsOrder: SeatView[] = []
+    const tCfg = { players: match.seats.length, direction: R.direction }
+    if (meSeat) for (let s = seatAfter(meSeat.seat, tCfg); s !== meSeat.seat; s = seatAfter(s, tCfg)) turnsOrder.push(match.seats[s]!)
+    else turnsOrder.push(...match.seats)
+
+    if (prevVersionRef.current !== null && match.version !== prevVersionRef.current) {
       if (match.status === 'FINISHED' && prevStatusRef.current !== 'FINISHED') {
         const winSeat = match.winnerSeat !== null ? match.seats[match.winnerSeat] : null
         playSound(winSeat?.userId === userId ? 'win' : 'lose')
-      } else if (trickKey && trickKey !== prevTrickKeyRef.current) {
+      } else if (trickKey && trickKey !== prevTrickKey) {
         playSound('play')
+        // Detect Four-of-a-Kind chopping a single Deuce (2)
+        if (prevTrick?.type === 'SINGLE' && prevTrick.keyRank === 15 && match.currentTrick?.type === 'FOUR_OF_A_KIND') {
+          if (chopTimerRef.current !== null) window.clearTimeout(chopTimerRef.current)
+          window.setTimeout(() => setChopBurst(true), 0)
+          chopTimerRef.current = window.setTimeout(() => setChopBurst(false), 1050)
+        }
+      } else if (prevTrick && !match.currentTrick && match.status === 'PLAYING') {
+        // Previous trick just cleared for a new round: sweep old cards toward winner (leadSeat)
+        const vec = seatVectorOffset(match.leadSeat, meSeat?.seat, turnsOrder)
+        if (sweepTimerRef.current !== null) window.clearTimeout(sweepTimerRef.current)
+        window.setTimeout(
+          () => setSweptTrick({ cards: prevTrick.cards, toX: vec.x, toY: vec.y, key: match.version }),
+          0,
+        )
+        sweepTimerRef.current = window.setTimeout(() => setSweptTrick(null), 430)
       } else if (match.passedSeats.length > prevPassedCountRef.current) {
         playSound('pass')
       }
+
       if (isMyTurnNow && !prevMyTurnRef.current) {
         playSound('turn')
+        try {
+          if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(35)
+          }
+        } catch {
+          // Ignore unsupported vibration
+        }
       }
     }
 
     prevVersionRef.current = match.version
-    prevTrickKeyRef.current = trickKey
+    prevTrickRef.current = match.currentTrick
     prevPassedCountRef.current = match.passedSeats.length
     prevMyTurnRef.current = isMyTurnNow
     prevStatusRef.current = match.status
   }, [match, userId])
+
+  useEffect(() => {
+    return () => {
+      if (chopTimerRef.current !== null) window.clearTimeout(chopTimerRef.current)
+      if (sweepTimerRef.current !== null) window.clearTimeout(sweepTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!playing || secondsLeft === null) return
@@ -272,17 +336,35 @@ export function GameTablePage() {
     }
   }, [playing, secondsLeft])
 
+  // Round-robin deal target keys matching visual seats
+  const dealSeatKeys = useMemo(() => {
+    if (!match) return []
+    const meSeat = match.seats.find((s) => s.userId === userId)
+    const turns = { players: match.seats.length, direction: R.direction }
+    const keys: string[] = []
+    if (meSeat) {
+      let oppIdx = 0
+      for (let s = seatAfter(meSeat.seat, turns); s !== meSeat.seat; s = seatAfter(s, turns)) {
+        keys.push(`opp-${oppIdx++}`)
+      }
+      keys.push('me')
+    } else {
+      for (let i = 0; i < match.seats.length; i++) keys.push(`opp-${i}`)
+    }
+    return keys
+  }, [match, userId])
+
   if (load.state === 'loading')
     return (
       <div role="status" className="grid gap-4">
         <span className="sr-only">Đang tải bàn chơi…</span>
-        <div className="casino-table-surface grid min-h-[34rem] gap-6 rounded-[2.5rem] p-5 sm:p-8 lg:min-h-[42rem]">
+        <div className="casino-table-surface grid min-h-[34rem] gap-6 rounded-[2.5rem] border-[6px] border-wood-rim p-5 sm:p-8 lg:min-h-[42rem]">
           <div className="grid grid-cols-3 gap-4">
             <div className="h-20 animate-pulse rounded-xl bg-white/10" />
             <div className="h-20 animate-pulse rounded-xl bg-white/10" />
             <div className="h-20 animate-pulse rounded-xl bg-white/10" />
           </div>
-          <div className="mx-auto h-36 w-72 animate-pulse rounded-2xl bg-white/10" />
+          <div className="mx-auto h-36 w-72 animate-pulse rounded-full bg-white/10" />
           <div className="mx-auto h-24 w-80 animate-pulse rounded-xl bg-white/10" />
         </div>
       </div>
@@ -313,13 +395,15 @@ export function GameTablePage() {
   const foulPlayer = match.foulSeat != null ? match.seats[match.foulSeat] : null
   const isLastPlayTwoWarning =
     selected.length === hand.length && hand.length > 0 && Boolean(hint && hint.type !== 'STRAIGHT' && hint.keyRank === 15)
+  const myPoints = me && !me.isBot ? (typeof me.points === 'number' ? me.points : profilePoints) : undefined
 
-  // Opponents in play order after me (CCW).
+  // Opponents in CCW order after me (or all seats if spectator)
   const order: SeatView[] = []
-  // Everyone else in play order after me (CCW over this match's 2–4 seats); spectators see all seats.
   const turns = { players: match.seats.length, direction: R.direction }
   if (me) for (let s = seatAfter(me.seat, turns); s !== me.seat; s = seatAfter(s, turns)) order.push(match.seats[s]!)
   else order.push(...match.seats)
+
+  const trickOrigin = seatVectorOffset(match.leadSeat, me?.seat, order)
 
   async function act(kind: 'play' | 'pass' | 'abort' | 'sam') {
     if (!match) return
@@ -334,7 +418,6 @@ export function GameTablePage() {
       } else await abortMatch(match.matchId)
       if (kind !== 'abort' && kind !== 'sam') clearSelection()
     } catch (e) {
-      // VERSION_CONFLICT: someone else moved first. Refetch silently and keep the selection (ARCHITECTURE §6).
       if (!(e instanceof ApiCallError && e.code === 'VERSION_CONFLICT'))
         setError(e instanceof ApiCallError ? e.message : 'Có lỗi xảy ra, vui lòng thử lại')
     } finally {
@@ -372,53 +455,72 @@ export function GameTablePage() {
   const winner = match.winnerSeat !== null ? match.seats[match.winnerSeat] : null
   const turnName = match.seats[match.currentSeat]?.displayName
 
-  // Position classes for seats around the table while preserving exact DOM order (CCW: right -> top -> left)
+  // Visual positioning around the oval table while strictly preserving CCW DOM order in `order`.
   function seatPositionClass(idx: number, total: number): string {
     if (total === 1) {
-      return 'mx-auto w-full max-w-[16rem]'
+      return 'mx-auto w-full max-w-[15rem] sm:max-w-[17rem]'
     }
     if (total === 2) {
-      return idx === 0 ? 'col-start-2 row-start-1' : 'col-start-1 row-start-1'
+      return idx === 0 ? 'col-start-2 row-start-1 lg:justify-self-end lg:w-60' : 'col-start-1 row-start-1 lg:justify-self-start lg:w-60'
     }
     if (total === 3) {
-      if (idx === 1) return 'col-span-2 row-start-1 mx-auto w-full max-w-[15rem] sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:max-w-[17rem]'
-      if (idx === 2) return 'col-start-1 row-start-2 sm:col-start-1 sm:row-start-1 sm:mt-8'
-      return 'col-start-2 row-start-2 sm:col-start-3 sm:row-start-1 sm:mt-8'
+      // Top row Left (idx 2) - Center (idx 1) - Right (idx 0) on mobile & flanking the oval on desktop
+      if (idx === 1) return 'col-start-2 row-start-1 w-full lg:max-w-[16rem] lg:justify-self-center'
+      if (idx === 2) return 'col-start-1 row-start-1 w-full lg:max-w-[15rem] lg:justify-self-start lg:translate-y-24 lg:z-20'
+      return 'col-start-3 row-start-1 w-full lg:max-w-[15rem] lg:justify-self-end lg:translate-y-24 lg:z-20'
     }
-    return ''
+    return 'w-full'
   }
+
+  const actionsDisabled = pending || deal.dealing
 
   return (
     <div className="grid min-w-0 gap-3">
-      {/* Grand Luxury Casino Arena Table */}
-      <div className="casino-table-surface relative flex min-h-[34rem] flex-col justify-between gap-4 overflow-hidden rounded-[2rem] p-3.5 sm:min-h-[38rem] sm:gap-5 sm:rounded-[3rem] sm:p-6 lg:min-h-[calc(100vh-6.75rem)] lg:p-7">
+      {/* Grand Luxury Royal Casino Oval Table */}
+      <div
+        ref={tableRef}
+        className={cn(
+          'casino-table-surface relative flex min-h-[34rem] flex-col justify-between gap-2.5 overflow-hidden rounded-[2rem] border-[6px] border-wood-rim p-3 ring-2 ring-gold/55 sm:min-h-[38rem] sm:gap-4 sm:rounded-[3.5rem] sm:border-[8px] sm:p-5 lg:min-h-[calc(100vh-5.75rem)] lg:rounded-[5.25rem] lg:border-[10px] lg:p-6',
+          chopBurst && 'animate-table-shake',
+        )}
+      >
         {/* Corner Filigree Ornaments */}
-        <span aria-hidden className="pointer-events-none absolute left-4 top-3 text-xs text-gold/30 select-none sm:text-sm">
+        <span aria-hidden className="pointer-events-none absolute left-5 top-3 text-xs text-gold/35 select-none sm:text-sm">
           ❖
         </span>
-        <span aria-hidden className="pointer-events-none absolute right-4 top-3 text-xs text-gold/30 select-none sm:text-sm">
+        <span aria-hidden className="pointer-events-none absolute right-5 top-3 text-xs text-gold/35 select-none sm:text-sm">
           ❖
         </span>
 
+        {/* Opening Deal Flight Overlay */}
+        <CardFlightLayer
+          dealing={deal.dealing}
+          step={deal.step}
+          totalSteps={deal.totalSteps}
+          seatKeys={dealSeatKeys}
+          tableRef={tableRef}
+          targetRefs={targetRefs}
+        />
+
         {/* Integrated Frosted-Glass Table Top HUD Bar */}
-        <div className="z-10 flex flex-wrap items-center justify-between gap-2 rounded-full border border-gold/25 bg-black/35 px-3.5 py-1.5 backdrop-blur-md">
-          <div className="flex items-center gap-2.5">
+        <div className="z-20 flex flex-wrap items-center justify-between gap-2 rounded-full border border-gold/25 bg-black/45 px-3 py-1.5 backdrop-blur-md">
+          <div className="flex items-center gap-2">
             <ConnectionBadge status={connection} />
-            <span className="hidden rounded-full border border-gold/30 bg-white/8 px-2.5 py-0.5 text-xs font-semibold text-gold-light sm:inline-block">
+            <span className="hidden rounded-full border border-gold/35 bg-white/8 px-2.5 py-0.5 text-xs font-semibold text-gold-light sm:inline-block">
               {match.ranked ? '♠ Bàn VIP Tính Điểm' : '✦ Bàn Luyện Tập'}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {!finished && secondsLeft !== null && (
               <span
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-bold tabular-nums shadow-2xs sm:text-sm',
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums shadow-2xs sm:px-3 sm:text-sm',
                   secondsLeft <= 5
-                    ? 'bg-suit-red text-white ring-1 ring-red-300'
+                    ? 'animate-urgent-ring bg-suit-red text-white ring-1 ring-red-300'
                     : myTurn
-                      ? 'bg-gradient-to-r from-gold-light to-gold text-wood-dark ring-1 ring-gold-bright'
-                      : 'border border-gold/30 bg-black/40 text-ivory',
+                      ? 'bg-gradient-to-r from-gold-shine via-gold-light to-gold text-wood-dark ring-1 ring-gold-bright'
+                      : 'border border-gold/30 bg-black/45 text-ivory',
                 )}
               >
                 <span aria-hidden className={cn('size-1.5 rounded-full', secondsLeft <= 5 ? 'bg-white' : 'bg-wood-dark')} />
@@ -434,7 +536,7 @@ export function GameTablePage() {
                 'relative inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none',
                 chatOpen
                   ? 'border-gold bg-gold/20 text-gold-light'
-                  : 'border-white/15 bg-white/8 text-ivory/80 hover:border-gold/50 hover:text-gold-light',
+                  : 'border-white/15 bg-white/8 text-ivory/85 hover:border-gold/50 hover:text-gold-light',
               )}
             >
               <span aria-hidden>💬</span>
@@ -450,7 +552,7 @@ export function GameTablePage() {
             </button>
             <Link
               to={`/room/${match.roomId}`}
-              className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium text-ivory/80 transition-colors hover:border-gold/50 hover:text-gold-light"
+              className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium text-ivory/85 transition-colors hover:border-gold/50 hover:text-gold-light"
             >
               Phòng chờ
             </Link>
@@ -460,7 +562,7 @@ export function GameTablePage() {
         {chatOpen && (
           <ChatPanel
             tone="dark"
-            className="absolute top-14 right-3 left-3 z-40 h-[26rem] max-h-[calc(100%-4.5rem)] shadow-2xl sm:left-auto sm:w-[22rem]"
+            className="absolute top-14 right-3 left-3 z-40 h-[25rem] max-h-[calc(100%-4.5rem)] shadow-2xl sm:left-auto sm:w-[22rem]"
             messages={chat.messages}
             meId={userId}
             people={chatPeople}
@@ -481,12 +583,12 @@ export function GameTablePage() {
           />
         )}
 
-        {/* Opponents seated around the top/sides of the table */}
+        {/* Opponents seated around the oval table */}
         <ol
           className={cn(
-            'z-10 grid gap-2.5 sm:gap-4',
+            'z-10 grid gap-1.5 sm:gap-3 lg:px-4',
             order.length === 3
-              ? 'grid-cols-2 sm:grid-cols-3'
+              ? 'grid-cols-3'
               : order.length === 2
                 ? 'grid-cols-2'
                 : order.length >= 4
@@ -504,40 +606,166 @@ export function GameTablePage() {
               secondsLeft={match.currentSeat === s.seat && !finished ? secondsLeft : null}
               bubble={chat.bubbles[s.userId]}
               className={seatPositionClass(idx, order.length)}
+              seatRef={(el) => {
+                targetRefs.current.set(`opp-${idx}`, el)
+              }}
             />
           ))}
         </ol>
 
-        {/* Center Felt Arena (`Bài trên bàn`) with Compact Left-Corner History & Centered Frosted-Glass Notifications */}
+        {/* Center Oval Felt Arena (`Bài trên bàn`) */}
         <section
           aria-label="Bài trên bàn"
-          className="casino-felt-ring relative z-10 flex min-h-52 flex-1 flex-col items-center justify-center gap-3 rounded-[2rem] bg-felt-dark/40 px-3 py-5 sm:min-h-64 sm:px-6 lg:min-h-72"
+          className={cn(
+            'casino-felt-ring relative z-10 flex min-h-48 flex-1 flex-col items-center justify-center gap-2.5 rounded-[2rem] bg-felt-dark/35 px-3 py-4 sm:min-h-60 sm:rounded-[4rem] sm:px-6 lg:min-h-64 lg:rounded-[9999px]',
+            order.length >= 3 && 'lg:px-56',
+          )}
         >
           {/* Ornate Center Casino Crest Watermark */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none"
-          >
-            <div className="flex flex-col items-center justify-center rounded-full border border-gold/12 px-10 py-6">
-              <span className="font-display text-xs tracking-[0.35em] text-gold-light/15 uppercase sm:text-base">
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none">
+            <div className="flex flex-col items-center justify-center rounded-full border border-gold/14 px-8 py-5 sm:px-12 sm:py-7">
+              <span className="font-display text-xs tracking-[0.35em] text-gold-light/18 uppercase sm:text-base">
                 ♠ Xâm Online ♠
               </span>
-              <span className="mt-1 text-[10px] tracking-[0.2em] text-gold-light/10 uppercase">
+              <span className="mt-1 text-[10px] tracking-[0.22em] text-gold-light/12 uppercase">
                 Royal Casino Club
               </span>
             </div>
           </div>
 
-          {/* Compact Frosted-Glass Mini History in the Left Corner */}
+          {/* CHẶT! Four-of-a-Kind Chops Deuce Burst */}
+          <ChopBurst show={chopBurst} />
+
+          {/* Swept Outgoing Trick (brief motion toward round winner) */}
+          {sweptTrick && (
+            <div
+              key={`sweep-${sweptTrick.key}`}
+              aria-hidden
+              style={
+                {
+                  '--sweep-x': sweptTrick.toX,
+                  '--sweep-y': sweptTrick.toY,
+                } as CSSProperties
+              }
+              className="animate-trick-sweep pointer-events-none absolute z-10 flex gap-1.5"
+            >
+              {parseCards(sweptTrick.cards).map((c) => (
+                <PlayingCard key={c.code} card={c} className="shadow-xl" />
+              ))}
+            </div>
+          )}
+
+          {/* Active Báo Xâm Alert (Frosted Glass) */}
+          {samPlayer && !finished && (
+            <div className="z-10 flex items-center gap-2 rounded-full border border-gold/80 bg-suit-red-dark/80 px-3.5 py-1 text-center text-xs font-bold text-gold-shine shadow-lg backdrop-blur-md sm:text-sm">
+              <span aria-hidden>🔥</span>
+              <span>
+                {samPlayer.userId === userId ? 'Bạn' : samPlayer.displayName} đã <strong>BÁO XÂM</strong> (đi trước · ai chặn được thắng ngay!)
+              </span>
+            </div>
+          )}
+
+          {/* Center Played Trick or New Round Notice */}
+          {match.currentTrick ? (
+            <div key={match.version} className="z-10 grid justify-items-center gap-2.5">
+              <p className="rounded-full border border-gold/45 bg-black/50 px-3.5 py-1 text-xs font-semibold text-gold-light shadow-md backdrop-blur-md sm:text-sm">
+                {match.seats[match.leadSeat]?.displayName} · {COMBINATION_LABEL[match.currentTrick.type]}
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
+                {parseCards(match.currentTrick.cards).map((c) => (
+                  <PlayingCard
+                    key={`${match.version}-${c.code}`}
+                    card={c}
+                    style={
+                      {
+                        '--from-x': trickOrigin.x,
+                        '--from-y': trickOrigin.y,
+                        '--tilt': `${cardTiltDeg(c.code)}deg`,
+                      } as CSSProperties
+                    }
+                    className="animate-card-play shadow-2xl"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            !finished && (
+              <div key={`round-${match.leadSeat}-${match.version}`} className="animate-round-new z-10 grid justify-items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="inline-flex size-8 items-center justify-center rounded-full border border-gold/40 bg-black/40 text-sm text-gold-light backdrop-blur-md"
+                >
+                  ✦
+                </span>
+                <p className="rounded-full border border-gold/45 bg-black/50 px-4 py-1 text-center text-xs font-semibold text-ivory shadow-md backdrop-blur-md sm:text-sm">
+                  Vòng mới · {turnName} đánh trước
+                </p>
+              </div>
+            )
+          )}
+
+          {/* Centered Frosted-Glass Turn / Combination / Thối 2 Warning / Error Pill */}
+          {me && !finished && (
+            <div className="z-10 mt-0.5 flex flex-col items-center gap-1.5">
+              <p
+                className={cn(
+                  'rounded-full border px-3.5 py-1 text-center text-xs font-semibold shadow-sm backdrop-blur-md transition-all sm:px-4 sm:text-sm',
+                  isLastPlayTwoWarning
+                    ? 'border-red-400/80 bg-red-950/80 font-bold text-red-100'
+                    : selected.length > 0
+                      ? hint
+                        ? 'border-gold/70 bg-black/55 text-gold-light'
+                        : 'border-red-400/65 bg-red-950/70 text-red-100'
+                      : myTurn
+                        ? 'border-gold/45 bg-black/50 text-gold-light'
+                        : 'border-white/15 bg-black/35 text-ivory/85',
+                )}
+                aria-live="polite"
+              >
+                {isLastPlayTwoWarning
+                  ? `⚠ Cảnh báo: Đánh ${COMBINATION_LABEL[hint!.type]} 2 cuối cùng sẽ bị xử thua (Thối 2)!`
+                  : selected.length === 0
+                    ? myTurn
+                      ? leading
+                        ? 'Bạn dẫn vòng: đánh bộ bất kỳ'
+                        : 'Chọn bộ lớn hơn để chặn, hoặc bỏ lượt'
+                      : `Đang chờ ${turnName} suy nghĩ…`
+                    : hint
+                      ? `${COMBINATION_LABEL[hint.type]} (${hint.size} lá)`
+                      : 'Chưa phải bộ hợp lệ'}
+              </p>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-full border border-red-400/65 bg-red-950/85 px-4 py-1 text-center text-xs font-semibold text-red-100 shadow-md backdrop-blur-md sm:text-sm"
+                >
+                  {error}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Centered Spectator Banner */}
+          {!me && !finished && (
+            <p
+              role="status"
+              className="z-10 max-w-md rounded-2xl border border-gold/45 bg-black/55 px-5 py-3 text-center text-sm font-medium text-ivory shadow-lg backdrop-blur-md"
+            >
+              Bạn đang xem ván này. Bạn sẽ được vào chơi từ ván sau khi có ghế trống.
+            </p>
+          )}
+
+          {/* Compact Left-Corner Frosted-Glass Match History */}
           <aside
             aria-label="Diễn biến ván"
-            className="z-20 flex max-h-24 w-44 flex-col rounded-xl border border-gold/20 bg-black/35 p-2 text-[11px] text-ivory/85 shadow-md backdrop-blur-md sm:absolute sm:bottom-3 sm:left-3 sm:max-h-32 sm:w-52"
+            className="casino-glass-panel z-20 flex max-h-20 w-full max-w-xs flex-col rounded-xl border border-gold/25 p-2 text-[11px] text-ivory/85 shadow-md sm:absolute sm:bottom-3 sm:left-4 sm:max-h-28 sm:w-48"
           >
-            <div className="mb-1 flex items-center justify-between border-b border-gold/15 pb-1">
+            <div className="mb-1 flex items-center justify-between border-b border-gold/15 pb-0.5">
               <span className="font-display text-[10px] font-bold tracking-wider text-gold-light/90 uppercase">
                 📜 Diễn biến
               </span>
-              <span className="rounded-full bg-white/10 px-1.5 text-[9px] font-semibold tabular-nums text-ivory/70">
+              <span className="rounded-full bg-white/10 px-1.5 text-[9px] font-semibold tabular-nums text-ivory/75">
                 #{match.version}
               </span>
             </div>
@@ -560,9 +788,7 @@ export function GameTablePage() {
                       ) : item.kind === 'PASS' ? (
                         <span className="text-[10px] text-ivory/65">Bỏ lượt</span>
                       ) : item.kind === 'DECLARE_SAM' ? (
-                        <span className="rounded bg-suit-red px-1 text-[10px] font-bold text-gold-light">
-                          🔥 Báo Xâm
-                        </span>
+                        <span className="rounded bg-suit-red px-1 text-[10px] font-bold text-gold-light">🔥 Báo Xâm</span>
                       ) : item.kind === 'ROUND_RESET' ? (
                         <span className="text-[10px] text-emerald-300">✦ Vòng mới</span>
                       ) : (
@@ -574,119 +800,30 @@ export function GameTablePage() {
               </ul>
             )}
           </aside>
-
-          {/* Active Báo Xâm Alert (Frosted Glass in Center of Table) */}
-          {samPlayer && !finished && (
-            <div className="z-10 flex items-center gap-2 rounded-full border border-gold/70 bg-suit-red-dark/75 px-4 py-1 text-center text-xs font-bold text-gold-light shadow-lg backdrop-blur-md sm:text-sm">
-              <span aria-hidden>🔥</span>
-              <span>
-                {samPlayer.userId === userId ? 'Bạn' : samPlayer.displayName} đã <strong>BÁO XÂM</strong> (đi trước · ai chặn được thắng ngay!)
-              </span>
-            </div>
-          )}
-
-          {/* Center Played Trick or New Round Notice */}
-          {match.currentTrick ? (
-            <div key={match.version} className="z-10 grid justify-items-center gap-3">
-              <p className="rounded-full border border-gold/40 bg-black/45 px-4 py-1 text-xs font-semibold text-gold-light shadow-md backdrop-blur-md sm:text-sm">
-                {match.seats[match.leadSeat]?.displayName} · {COMBINATION_LABEL[match.currentTrick.type]}
-              </p>
-              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2.5">
-                {parseCards(match.currentTrick.cards).map((c) => (
-                  <PlayingCard key={`${match.version}-${c.code}`} card={c} className="animate-card-play shadow-xl" />
-                ))}
-              </div>
-            </div>
-          ) : (
-            !finished && (
-              <div key={`round-${match.leadSeat}-${match.version}`} className="animate-round-new z-10 grid justify-items-center gap-2">
-                <span
-                  aria-hidden
-                  className="inline-flex size-9 items-center justify-center rounded-full border border-gold/35 bg-black/35 text-base text-gold-light backdrop-blur-md"
-                >
-                  ✦
-                </span>
-                <p className="rounded-full border border-gold/40 bg-black/45 px-5 py-1.5 text-center text-xs font-semibold text-ivory shadow-md backdrop-blur-md sm:text-sm">
-                  Vòng mới · {turnName} đánh trước
-                </p>
-              </div>
-            )
-          )}
-
-          {/* Centered Frosted-Glass Turn / Combination / Warning / Error Notification HUD */}
-          {me && !finished && (
-            <div className="z-10 mt-1 flex flex-col items-center gap-1.5">
-              <p
-                className={cn(
-                  'rounded-full border px-4 py-1 text-center text-xs font-semibold shadow-sm backdrop-blur-md transition-all sm:text-sm',
-                  isLastPlayTwoWarning
-                    ? 'border-red-400/70 bg-red-950/75 font-bold text-red-200'
-                    : selected.length > 0
-                      ? hint
-                        ? 'border-gold/60 bg-black/50 text-gold-light'
-                        : 'border-red-400/60 bg-red-950/65 text-red-200'
-                      : myTurn
-                        ? 'border-gold/40 bg-black/45 text-gold-light'
-                        : 'border-white/15 bg-black/30 text-ivory/80',
-                )}
-                aria-live="polite"
-              >
-                {isLastPlayTwoWarning
-                  ? `⚠ Cảnh báo: Đánh ${COMBINATION_LABEL[hint!.type]} 2 cuối cùng sẽ bị xử thua (Thối 2)!`
-                  : selected.length === 0
-                    ? myTurn
-                      ? leading
-                        ? 'Bạn dẫn vòng: đánh bộ bất kỳ'
-                        : 'Chọn bộ lớn hơn để chặn, hoặc bỏ lượt'
-                      : `Đang chờ ${turnName} suy nghĩ…`
-                    : hint
-                      ? `${COMBINATION_LABEL[hint.type]} (${hint.size} lá)`
-                      : 'Chưa phải bộ hợp lệ'}
-              </p>
-
-              {error && (
-                <p
-                  role="alert"
-                  className="rounded-full border border-red-400/60 bg-red-950/80 px-4 py-1 text-center text-xs font-semibold text-red-200 shadow-md backdrop-blur-md sm:text-sm"
-                >
-                  {error}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Centered Frosted-Glass Spectator Banner */}
-          {!me && !finished && (
-            <p
-              role="status"
-              className="z-10 max-w-md rounded-2xl border border-gold/40 bg-black/50 px-5 py-3 text-center text-sm font-medium text-ivory shadow-lg backdrop-blur-md"
-            >
-              Bạn đang xem ván này. Bạn sẽ được vào chơi từ ván sau khi có ghế trống.
-            </p>
-          )}
         </section>
 
         {/* My Seat & Hand Dock at the Bottom of the Table */}
         {me && !finished && (
           <section
+            ref={(el) => {
+              targetRefs.current.set('me', el)
+            }}
             aria-label="Bài của bạn"
             className={cn(
-              'relative z-10 grid gap-2.5 rounded-2xl border p-3 backdrop-blur-md transition-all sm:p-4',
-              myTurn
-                ? 'border-gold bg-black/45 shadow-[0_0_28px_rgba(212,160,23,0.28)]'
-                : 'border-white/12 bg-black/35',
+              'casino-glass-panel relative z-10 grid gap-2 rounded-2xl border px-2 py-2.5 transition-all sm:gap-2.5 sm:p-4',
+              myTurn ? 'animate-turn-seat border-gold-light bg-black/55' : 'border-white/15',
             )}
           >
             {/* My Seat Header Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="relative">
                   <Avatar
                     avatarId={me.avatarId}
                     name={me.displayName}
                     className={cn(
                       'size-9 text-xs font-extrabold shadow-inner ring-2',
-                      myTurn ? 'ring-gold-light' : 'ring-gold/40',
+                      myTurn ? 'ring-gold-shine' : 'ring-gold/45',
                     )}
                     fallbackClassName={myTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-gold-light'}
                   />
@@ -697,6 +834,14 @@ export function GameTablePage() {
                 <span className={cn('font-bold', myTurn ? 'text-gold-light' : 'text-ivory/85')}>
                   {myTurn ? 'Đến lượt bạn' : `Chờ ${turnName}…`}
                 </span>
+                {typeof myPoints === 'number' && (
+                  <span className="casino-chip inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-wood-dark">
+                    <span aria-hidden className="text-[9px]">
+                      ●
+                    </span>
+                    {myPoints} điểm
+                  </span>
+                )}
                 {match.samSeat === me.seat && (
                   <span className="rounded-full border border-gold bg-suit-red px-2.5 py-0.5 text-xs font-bold text-gold-light shadow-2xs">
                     🔥 Đang Báo Xâm
@@ -714,7 +859,7 @@ export function GameTablePage() {
                     onClick={() => setEmotesOpen((o) => !o)}
                     className={cn(
                       'inline-flex size-8 cursor-pointer items-center justify-center rounded-full border text-base transition-colors focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none',
-                      emotesOpen ? 'border-gold bg-gold/25' : 'border-gold/35 bg-black/45 hover:border-gold',
+                      emotesOpen ? 'border-gold bg-gold/25' : 'border-gold/35 bg-black/50 hover:border-gold',
                     )}
                   >
                     <span aria-hidden>😊</span>
@@ -732,58 +877,59 @@ export function GameTablePage() {
                   )}
                 </span>
                 {hand.length === 1 && (
-                  <span className="rounded-full bg-suit-red px-2.5 py-0.5 text-xs font-bold text-white shadow-2xs">
-                    Báo 1
+                  <span className="animate-bao1-pulse rounded-full bg-suit-red px-2.5 py-0.5 text-xs font-bold text-white shadow-2xs">
+                    🔥 Báo 1
                   </span>
                 )}
-                <span className="rounded-full border border-gold/35 bg-black/45 px-3 py-0.5 text-xs font-bold tabular-nums text-gold-light">
+                <span className="rounded-full border border-gold/40 bg-black/50 px-3 py-0.5 text-xs font-bold tabular-nums text-gold-light">
                   {hand.length} lá
                 </span>
               </div>
             </div>
 
-            {/* Turn progress bar for my seat */}
+            {/* 30s turn progress bar */}
             {myTurn && secondsLeft !== null && (
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/12" aria-hidden>
+              <div className="mx-1 h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-300',
-                    secondsLeft <= 5 ? 'bg-suit-red' : 'bg-gradient-to-r from-gold-dark via-gold to-gold-light',
+                    secondsLeft <= 5 ? 'bg-suit-red' : 'bg-gradient-to-r from-gold-dark via-gold to-gold-shine',
                   )}
                   style={{ width: `${Math.min(100, Math.max(0, (secondsLeft / TURN_SECONDS_MAX) * 100))}%` }}
                 />
               </div>
             )}
 
-            {/* Player Hand (10 cards stacked, fits 375px with zero overflow, grand size on desktop) */}
+            {/* Player Hand (fanned on desktop, compact stack on mobile) */}
             <Hand cards={hand} disabled={pending} />
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 sm:justify-between">
-              <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {/* Action Controls */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5 sm:justify-between sm:gap-2.5">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
                 <Button
                   variant="gold"
-                  disabled={!myTurn || pending || !hint}
+                  size="lg"
+                  disabled={!myTurn || actionsDisabled || !hint}
                   onClick={() => void act('play')}
-                  className="min-w-28 font-bold shadow-md"
+                  className="h-11 min-w-32 px-7 text-base font-extrabold shadow-[0_6px_18px_rgba(212,160,23,0.4)]"
                 >
                   Đánh
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={!myTurn || pending || leading}
+                  disabled={!myTurn || actionsDisabled || leading}
                   onClick={() => void act('pass')}
-                  className="border-gold/40 bg-felt-dark/80 text-ivory hover:border-gold hover:bg-felt-dark"
+                  className="h-11 border-gold/45 bg-felt-dark/85 px-5 font-bold text-ivory hover:border-gold hover:bg-felt-dark"
                 >
                   Bỏ lượt
                 </Button>
                 {canDeclareSam && (
                   <button
                     type="button"
-                    disabled={pending}
+                    disabled={actionsDisabled}
                     onClick={() => void act('sam')}
                     title="Báo Xâm: Xin đi trước và đánh hết bài không ai chặn được (nếu bị chặn sẽ xử thua)"
-                    className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-gold bg-gradient-to-b from-suit-red to-suit-red-dark px-4 py-2 text-sm font-extrabold text-gold-light shadow-[0_0_16px_rgba(212,160,23,0.45)] transition-all hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                    className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-gold-bright bg-gradient-to-b from-ruby-fire to-suit-red-dark px-5 py-2 text-sm font-extrabold text-gold-shine shadow-(--shadow-fire-glow) transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
                   >
                     <span aria-hidden>🔥</span>
                     <span>Báo Xâm</span>
@@ -811,7 +957,7 @@ export function GameTablePage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-ivory/65 hover:bg-white/10 hover:text-ivory"
+                    className="text-ivory/60 hover:bg-white/10 hover:text-ivory"
                     onClick={() => setConfirmAbort(true)}
                   >
                     Huỷ ván…
@@ -821,300 +967,21 @@ export function GameTablePage() {
           </section>
         )}
 
-        {/* Centered Frosted-Glass Match Results Modal Overlay (`Kết quả`) right inside the table */}
+        {/* Centered Frosted-Glass Match Results Modal */}
         {finished && (
-          <div className="inset-0 z-30 flex items-center justify-center rounded-[1.75rem] bg-black/55 p-3 backdrop-blur-md sm:absolute sm:p-6">
-            <section
-              aria-label="Kết quả"
-              className="relative grid w-full max-w-xl min-w-0 gap-4 overflow-hidden rounded-2xl border-2 border-gold bg-ivory/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-md sm:p-6"
-            >
-              {/* Subtle confetti on finished match (<= 2s, disabled under prefers-reduced-motion) */}
-              {match.status === 'FINISHED' && (
-                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-28 overflow-hidden">
-                  {CONFETTI_PIECES.map((p, i) => (
-                    <span
-                      key={i}
-                      style={{ left: p.left, animationDelay: p.delay }}
-                      className={cn('animate-confetti absolute top-0 size-2 rounded-xs opacity-0', p.bg)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <div className="grid justify-items-center gap-2 text-center">
-                <span
-                  aria-hidden
-                  className="inline-flex size-12 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold text-2xl shadow-md ring-4 ring-gold/25"
-                >
-                  {match.status === 'ABORTED' ? '✕' : '👑'}
-                </span>
-                <p className="font-display text-xl font-bold text-slate-900 sm:text-2xl" role="status">
-                  {match.status === 'ABORTED'
-                    ? 'Ván đã bị huỷ (không tính điểm)'
-                    : !me
-                      ? `${winner?.displayName ?? 'Ván'} thắng ván này`
-                      : winner
-                        ? winner.userId === userId
-                          ? 'Bạn thắng ván này! 🏆'
-                          : `${winner.displayName} thắng ván này`
-                        : 'Ván đã kết thúc'}
-                </p>
-
-                {/* Special Reason Badge (Thối 2 cuối / Bắt Xâm / Ăn Xâm) */}
-                {match.endReason === 'THOI_2_CUOI' && foulPlayer && (
-                  <p className="rounded-xl border border-suit-red/40 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-suit-red sm:text-sm">
-                    ⚠ {foulPlayer.displayName} đánh cây 2 cuối cùng nên bị xử thua (Thối 2)!
-                  </p>
-                )}
-                {match.endReason === 'SAM_CAUGHT' && foulPlayer && winner && (
-                  <p className="rounded-xl border border-suit-red/40 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-suit-red sm:text-sm">
-                    🛡️ {winner.displayName} đã chặn được bài Báo Xâm của {foulPlayer.displayName} và thắng ngay!
-                  </p>
-                )}
-                {match.endReason === 'SAM_SUCCESS' && winner && (
-                  <p className="rounded-xl border border-gold bg-amber-50 px-3.5 py-1.5 text-xs font-semibold text-amber-900 sm:text-sm">
-                    🔥 {winner.displayName} Báo Xâm thành công, không ai chặn được!
-                  </p>
-                )}
-
-                {!match.ranked && match.status === 'FINISHED' && (
-                  <p className="rounded-full border border-gold/40 bg-amber-50/80 px-3.5 py-1 text-xs font-medium text-amber-900 sm:text-sm">
-                    Ván luyện tập có máy: không cộng/trừ điểm, không ghi vào lịch sử.
-                  </p>
-                )}
-                {winner && match.status === 'FINISHED' && (
-                  <p className="text-xs text-slate-600">
-                    Ván tiếp theo: <strong>{winner.displayName}</strong> (nhất ván này) sẽ được đánh trước.
-                  </p>
-                )}
-              </div>
-
-              {results && results.length > 0 && <ResultsTable results={results} userId={userId} />}
-
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {me && (
-                  <Button
-                    variant="gold"
-                    disabled={startingNext}
-                    onClick={() => void onContinueNextMatch()}
-                    className="px-6 font-bold shadow-md"
-                  >
-                    {startingNext ? 'Đang chia bài ván mới…' : 'Tiếp tục ván mới'}
-                  </Button>
-                )}
-                <Button asChild variant={me ? 'outline' : 'gold'} className="w-fit px-5 font-semibold">
-                  <Link to={`/room/${match.roomId}`}>Về phòng</Link>
-                </Button>
-              </div>
-
-              {error && (
-                <p role="alert" className="text-center text-sm font-medium text-suit-red">
-                  {error}
-                </p>
-              )}
-            </section>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SeatBadge({
-  seat,
-  match,
-  online,
-  secondsLeft,
-  bubble,
-  className,
-}: {
-  seat: SeatView
-  match: MatchView
-  online: boolean
-  secondsLeft: number | null
-  bubble?: EmoteBubbleState
-  className?: string
-}) {
-  const isTurn = match.status === 'PLAYING' && match.currentSeat === seat.seat
-  const passed = match.passedSeats.includes(seat.seat)
-  const isWinner = match.winnerSeat === seat.seat
-  const isSam = match.samSeat === seat.seat
-  const progress =
-    isTurn && secondsLeft !== null ? Math.min(1, Math.max(0, secondsLeft / TURN_SECONDS_MAX)) : 0
-  const circumference = 2 * Math.PI * 18
-
-  return (
-    <li
-      aria-current={isTurn ? 'true' : undefined}
-      className={cn(
-        'relative flex items-center gap-3 rounded-2xl border bg-black/40 p-2.5 text-sm text-ivory shadow-md backdrop-blur-md transition-all sm:p-3',
-        isTurn
-          ? 'animate-turn-seat border-gold bg-black/60'
-          : isSam
-            ? 'border-suit-red ring-1 ring-gold'
-            : 'border-gold/25',
-        passed && 'opacity-65',
-        className,
-      )}
-    >
-      {/* Avatar with optional 30s SVG countdown ring */}
-      <div className="relative flex size-11 shrink-0 items-center justify-center" aria-hidden>
-        {isTurn && secondsLeft !== null && (
-          <svg className="absolute inset-0 size-11 -rotate-90" viewBox="0 0 44 44">
-            <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5" />
-            <circle
-              cx="22"
-              cy="22"
-              r="18"
-              fill="none"
-              stroke={secondsLeft <= 5 ? '#ef4444' : '#f3d478'}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - progress)}
-            />
-          </svg>
-        )}
-        <Avatar
-          avatarId={seat.avatarId}
-          isBot={seat.isBot}
-          userId={seat.userId}
-          name={seat.displayName}
-          className={cn(
-            'size-9 text-xs font-extrabold shadow-inner ring-1',
-            isTurn ? 'ring-gold-light' : 'ring-white/25',
-          )}
-          fallbackClassName={isTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-ivory'}
-        />
-      </div>
-      {bubble && <EmoteBubble key={bubble.key} code={bubble.code} name={seat.displayName} className="top-2 right-2" />}
-
-      {/* Seat details: Note `li p:first-child` is kept intact for unit test compatibility */}
-      <div className="grid min-w-0 flex-1 gap-0.5">
-        <p className="flex items-center gap-1.5 truncate font-semibold text-ivory">
-          <span
-            aria-label={online ? 'Đang online' : 'Mất kết nối'}
-            title={online ? 'Đang online' : 'Mất kết nối'}
-            className={cn('size-2 shrink-0 rounded-full', online ? 'bg-emerald-400' : 'bg-slate-400')}
+          <ResultsModal
+            match={match}
+            me={me}
+            winner={winner}
+            foulPlayer={foulPlayer}
+            results={results}
+            userId={userId}
+            startingNext={startingNext}
+            error={error}
+            onContinue={() => void onContinueNextMatch()}
           />
-          <span className="truncate">
-            {seat.isBot && <span aria-label="Máy">🤖 </span>}
-            {seat.displayName}
-          </span>
-          {isWinner && ' 🏆'}
-        </p>
-
-        <div className="flex items-center gap-2">
-          <CardBackStack count={seat.cardCount} />
-          <p className="text-xs font-semibold text-gold-light/95">
-            {seat.cardCount} lá
-            {seat.cardCount === 1 && match.status === 'PLAYING' && (
-              <span className="ml-1.5 inline-block rounded bg-suit-red px-1.5 py-0.2 text-[11px] font-bold text-white">
-                · Báo 1
-              </span>
-            )}
-            {isSam && match.status === 'PLAYING' && (
-              <span className="ml-1.5 inline-block rounded bg-suit-red px-1.5 py-0.2 text-[11px] font-bold text-gold-light">
-                · Báo Xâm
-              </span>
-            )}
-          </p>
-        </div>
-
-        <p className="truncate text-[11px] text-ivory/70">
-          {[isTurn && 'Đang đánh', passed && 'Đã bỏ', !seat.hasPlayed && 'Chưa đánh'].filter(Boolean).join(' · ') ||
-            '\u00A0'}
-        </p>
+        )}
       </div>
-    </li>
-  )
-}
-
-/** Persisted results only: the client never computes scores. */
-function ResultsTable({ results, userId }: { results: ResultView[]; userId: string | undefined }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border border-card-border bg-white">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Kết quả ván</caption>
-        <thead>
-          <tr className="border-b border-card-border bg-cream/70 text-left text-xs font-semibold tracking-wider text-slate-600 uppercase">
-            <th className="px-3 py-2.5">Người chơi</th>
-            <th className="px-3 py-2.5">Bài còn lại</th>
-            <th className="px-3 py-2.5 text-right">Điểm</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...results]
-            .sort((a, b) => b.scoreDelta - a.scoreDelta)
-            .map((r) => (
-              <tr
-                key={r.seat}
-                className={cn(
-                  'border-b border-card-border/60 last:border-0',
-                  r.userId === userId && 'bg-amber-50/70',
-                  r.isWinner && 'font-medium',
-                )}
-              >
-                <td className="px-3 py-2.5 align-top">
-                  <span className="font-semibold text-slate-900">{r.displayName}</span>
-                  {r.isWinner && ' 🏆'}
-                  {r.penalties.cong && (
-                    <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-suit-red">
-                      Cóng
-                    </span>
-                  )}
-                  {r.penalties.thoi2Cuoi && (
-                    <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-suit-red">
-                      Thối 2 cuối
-                    </span>
-                  )}
-                  {r.penalties.denSam && (
-                    <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-suit-red">
-                      Đền Xâm
-                    </span>
-                  )}
-                  {!r.penalties.thoi2Cuoi && r.penalties.thoi2 && r.penalties.thoi2 > 0 && (
-                    <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                      Thối {r.penalties.thoi2} cây 2
-                    </span>
-                  )}
-                  {r.penalties.owed !== undefined && (
-                    <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                      Nợ {r.penalties.owed}, trả hết {-r.scoreDelta} điểm đang có
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 align-top">
-                  {r.remainingCards === 0 ? (
-                    <span className="text-slate-400">—</span>
-                  ) : (
-                    <span
-                      className="flex flex-wrap gap-1"
-                      aria-label={`${r.remainingCards} lá: ${r.remainingHand.join(' ')}`}
-                    >
-                      {r.remainingHand.map((c) => (
-                        <span
-                          key={c}
-                          className="rounded border border-card-border bg-cream px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-800"
-                        >
-                          {c}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </td>
-                <td
-                  className={cn(
-                    'px-3 py-2.5 text-right text-base font-bold tabular-nums align-top',
-                    r.scoreDelta > 0 ? 'text-emerald-700' : r.scoreDelta < 0 ? 'text-suit-red' : 'text-slate-600',
-                  )}
-                >
-                  {r.scoreDelta > 0 ? `+${r.scoreDelta}` : r.scoreDelta}
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
     </div>
   )
 }

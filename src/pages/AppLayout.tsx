@@ -31,8 +31,8 @@ export function AppLayout() {
   }, [userId, pathname, refresh])
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b-2 border-gold-dark/70 bg-gradient-to-r from-felt-deep via-felt-dark to-felt-deep text-ivory shadow-md">
+    <div className="min-h-screen overflow-x-clip">
+      <header className="border-b-2 border-gold/65 bg-gradient-to-r from-wood-rim via-felt-deep to-wood-rim text-ivory shadow-[0_6px_20px_rgba(4,27,16,0.35)]">
         <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-1.5 px-2.5 py-2 sm:gap-2 sm:px-4">
           {/* Left: Brand Logo & Desktop Navigation */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-5">

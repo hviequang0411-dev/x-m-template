@@ -194,117 +194,134 @@ export function WaitingRoomPage() {
         </CardContent>
       </Card>
 
-      {/* 4 Casino Seat Cards */}
-      <ol className="grid gap-3.5 sm:grid-cols-2" aria-label="Chỗ ngồi">
-        {seats.map((p, seat) => {
-          const seatIsHost = p?.userId === room.hostId
-          const seatIsMe = p?.userId === userId
-          const seatLow = p && !p.isBot && p.points < MIN_POINTS && !hasBot
-          return (
-            <li
-              key={seat}
-              className={cn(
-                'relative flex items-center justify-between gap-3 rounded-2xl border p-4 transition-all',
-                p
-                  ? seatIsMe
-                    ? 'border-gold bg-ivory shadow-sm ring-1 ring-gold/35'
-                    : 'border-card-border bg-ivory shadow-2xs'
-                  : 'border-dashed border-card-border bg-cream/60 text-slate-400',
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                {/* Seat Avatar */}
-                <div aria-hidden className="relative shrink-0">
-                  {p ? (
-                    <Avatar
-                      avatarId={p.avatarId}
-                      isBot={p.isBot}
-                      userId={p.userId}
-                      name={p.displayName}
-                      className={cn('size-11 text-sm shadow-inner ring-2', seatIsHost ? 'ring-gold' : 'ring-gold/40')}
-                      fallbackClassName={
-                        seatIsHost ? 'bg-gradient-to-b from-gold-light to-gold text-wood-dark' : 'bg-felt text-ivory'
-                      }
-                    />
-                  ) : (
-                    <span className="flex size-11 items-center justify-center rounded-full border border-dashed border-slate-300 bg-cream text-sm font-bold text-slate-400">
-                      {seat + 1}
-                    </span>
-                  )}
-                  {seatIsHost && (
-                    <span
-                      title="Chủ phòng"
-                      className="absolute -right-1 -top-1.5 flex size-5 items-center justify-center rounded-full bg-ivory text-xs shadow ring-1 ring-gold"
-                    >
-                      👑
-                    </span>
-                  )}
-                </div>
+      {/* 4 Casino Seats Around Mini Oval Felt Table */}
+      <div className="casino-table-surface relative overflow-hidden rounded-[2rem] border-[5px] border-wood-rim p-3.5 ring-2 ring-gold/50 sm:rounded-[3rem] sm:p-6">
+        {/* Decorative Mini Oval Felt Ring Centerpiece (visible sm+) */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-12 inset-y-8 hidden items-center justify-center rounded-full border border-gold/25 bg-felt-dark/30 sm:flex"
+        >
+          <span className="font-display text-xs tracking-[0.28em] text-gold-light/25 uppercase">
+            ♠ Xâm Online · Bàn 4 Chỗ ♠
+          </span>
+        </div>
 
-                {/* Seat Label & Player Info */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-medium text-slate-500">Ghế {seat + 1}</span>
-                    {p && (
-                      <span
-                        aria-label={isOnline(p) ? 'Đang online' : 'Mất kết nối'}
-                        title={isOnline(p) ? 'Đang online' : 'Mất kết nối'}
-                        className={cn(
-                          'inline-block size-2 rounded-full',
-                          isOnline(p) ? 'bg-emerald-500' : 'bg-slate-300',
-                        )}
+        <ol className="relative z-10 grid gap-3 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6" aria-label="Chỗ ngồi">
+          {seats.map((p, seat) => {
+            const seatIsHost = p?.userId === room.hostId
+            const seatIsMe = p?.userId === userId
+            const seatLow = p && !p.isBot && p.points < MIN_POINTS && !hasBot
+            return (
+              <li
+                key={seat}
+                className={cn(
+                  'relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 shadow-md transition-all sm:p-4',
+                  p
+                    ? seatIsMe
+                      ? 'border-gold-light bg-ivory/95 ring-2 ring-gold/50'
+                      : 'border-gold/35 bg-ivory/95'
+                    : 'border-dashed border-gold/35 bg-black/30 text-ivory/75 backdrop-blur-xs',
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  {/* Seat Avatar */}
+                  <div aria-hidden className="relative shrink-0">
+                    {p ? (
+                      <Avatar
+                        avatarId={p.avatarId}
+                        isBot={p.isBot}
+                        userId={p.userId}
+                        name={p.displayName}
+                        className={cn('size-11 text-sm shadow-inner ring-2', seatIsHost ? 'ring-gold' : 'ring-gold/45')}
+                        fallbackClassName={
+                          seatIsHost ? 'bg-gradient-to-b from-gold-light to-gold text-wood-dark' : 'bg-felt text-ivory'
+                        }
                       />
+                    ) : (
+                      <span className="flex size-11 items-center justify-center rounded-full border border-dashed border-gold/45 bg-black/25 text-sm font-bold text-gold-light/70">
+                        {seat + 1}
+                      </span>
                     )}
-                  </div>
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className={cn('truncate font-semibold', p ? 'text-slate-900' : 'text-slate-400')}>
-                      {p ? `${p.isBot ? '🤖 ' : ''}${p.displayName}` : 'Trống'}
-                    </span>
-                    {p && !p.isBot && (
+                    {seatIsHost && (
                       <span
-                        className={cn(
-                          'inline-flex items-center rounded-full px-2 py-0.2 text-xs font-semibold tabular-nums',
-                          seatLow
-                            ? 'bg-red-100 text-suit-red ring-1 ring-suit-red/30'
-                            : 'bg-amber-50 text-gold-dark ring-1 ring-gold/30',
-                        )}
+                        title="Chủ phòng"
+                        className="absolute -right-1 -top-1.5 flex size-5 items-center justify-center rounded-full bg-gold-shine text-xs shadow ring-1 ring-gold"
                       >
-                        {p.points} điểm
+                        👑
                       </span>
                     )}
                   </div>
-                </div>
-              </div>
 
-              <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-slate-500">
-                <span className="rounded-md bg-cream-dark/70 px-2 py-0.5 text-slate-600 empty:hidden">
-                  {[seatIsHost && 'Chủ phòng', seatIsMe && 'Bạn', p?.isBot && 'Máy'].filter(Boolean).join(' · ')}
+                  {/* Seat Label & Player Info */}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn('text-xs font-medium', p ? 'text-slate-500' : 'text-gold-light/65')}>
+                        Ghế {seat + 1}
+                      </span>
+                      {p && (
+                        <span
+                          aria-label={isOnline(p) ? 'Đang online' : 'Mất kết nối'}
+                          title={isOnline(p) ? 'Đang online' : 'Mất kết nối'}
+                          className={cn(
+                            'inline-block size-2 rounded-full',
+                            isOnline(p) ? 'bg-emerald-500' : 'bg-slate-300',
+                          )}
+                        />
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className={cn('truncate font-semibold', p ? 'text-slate-900' : 'text-ivory/60 italic')}>
+                        {p ? `${p.isBot ? '🤖 ' : ''}${p.displayName}` : 'Trống'}
+                      </span>
+                      {p && !p.isBot && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.2 text-xs font-bold tabular-nums',
+                            seatLow
+                              ? 'bg-red-100 text-suit-red ring-1 ring-suit-red/30'
+                              : 'casino-chip text-wood-dark',
+                          )}
+                        >
+                          <span aria-hidden className="text-[8px]">
+                            ●
+                          </span>
+                          {p.points} điểm
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-slate-500">
+                  <span className="rounded-md bg-cream-dark/80 px-2 py-0.5 text-slate-700 empty:hidden">
+                    {[seatIsHost && 'Chủ phòng', seatIsMe && 'Bạn', p?.isBot && 'Máy'].filter(Boolean).join(' · ')}
+                  </span>
+                  {p?.isBot && isHost && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs text-slate-600 hover:border-suit-red hover:text-suit-red"
+                      disabled={busy !== null}
+                      aria-label={`Bỏ ${p.displayName}`}
+                      onClick={() => void run({ removeBot: p.userId })}
+                    >
+                      Bỏ
+                    </Button>
+                  )}
                 </span>
-                {p?.isBot && isHost && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2.5 text-xs text-slate-600 hover:border-suit-red hover:text-suit-red"
-                    disabled={busy !== null}
-                    aria-label={`Bỏ ${p.displayName}`}
-                    onClick={() => void run({ removeBot: p.userId })}
-                  >
-                    Bỏ
-                  </Button>
+                {p && chat.bubbles[p.userId] && (
+                  <EmoteBubble
+                    key={chat.bubbles[p.userId]!.key}
+                    code={chat.bubbles[p.userId]!.code}
+                    name={p.displayName}
+                    className="-top-6 left-12"
+                  />
                 )}
-              </span>
-              {p && chat.bubbles[p.userId] && (
-                <EmoteBubble
-                  key={chat.bubbles[p.userId]!.key}
-                  code={chat.bubbles[p.userId]!.code}
-                  name={p.displayName}
-                  className="-top-3.5 left-16"
-                />
-              )}
-            </li>
-          )
-        })}
-      </ol>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
 
       {/* Waiting Queue Section */}
       {room.waiting.length > 0 && (

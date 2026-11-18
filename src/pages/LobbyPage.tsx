@@ -118,17 +118,28 @@ export function LobbyPage() {
               fallbackClassName="bg-gradient-to-b from-gold-light to-gold text-wood-dark"
             />
           </Link>
-        <div className="grid min-w-0 gap-1.5">
-          <p className="text-xs font-semibold tracking-wider text-gold-light/80 uppercase">Sảnh chính</p>
-          <h2 className="font-display text-2xl font-bold text-gold-light sm:text-3xl">
-            Xin chào, {profile?.display_name ?? 'người chơi'}
-          </h2>
-          {profile && (
-            <p className="text-sm text-ivory/85">
-              Điểm: {profile.total_score} · Đã chơi: {profile.matches_played} · Thắng: {profile.matches_won}
-            </p>
-          )}
-        </div>
+          <div className="grid min-w-0 gap-1.5">
+            <p className="text-xs font-semibold tracking-wider text-gold-light/80 uppercase">Sảnh chính</p>
+            <h2 className="font-display text-2xl font-bold text-gold-light sm:text-3xl">
+              Xin chào, {profile?.display_name ?? 'người chơi'}
+            </h2>
+            {profile && (
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                <span className="casino-chip inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-extrabold tabular-nums text-wood-dark">
+                  <span aria-hidden className="text-[9px]">
+                    ●
+                  </span>
+                  {profile.total_score} điểm
+                </span>
+                <span className="rounded-full border border-gold/25 bg-black/25 px-2.5 py-0.5 font-medium tabular-nums text-ivory/90">
+                  Đã chơi: {profile.matches_played}
+                </span>
+                <span className="rounded-full border border-gold/25 bg-black/25 px-2.5 py-0.5 font-medium tabular-nums text-ivory/90">
+                  Thắng: {profile.matches_won}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -157,12 +168,18 @@ export function LobbyPage() {
         </Card>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2">
-          <Card className="flex flex-col justify-between">
+          <Card className="relative flex flex-col justify-between overflow-hidden border-gold/45 transition-all hover:border-gold hover:shadow-md">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-3 -bottom-4 font-display text-7xl text-gold/10 select-none"
+            >
+              ♠
+            </span>
             <CardHeader>
               <div className="flex items-center gap-2.5">
                 <span
                   aria-hidden
-                  className="inline-flex size-9 items-center justify-center rounded-xl bg-felt text-base text-gold-light shadow-xs"
+                  className="inline-flex size-9 items-center justify-center rounded-xl bg-felt text-base text-gold-light shadow-xs ring-1 ring-gold/40"
                 >
                   ♠
                 </span>
@@ -170,8 +187,8 @@ export function LobbyPage() {
               </div>
               <CardDescription>Tạo phòng riêng và mời 3 người bạn bằng mã phòng.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button variant="gold" className="w-full font-bold" disabled={busy !== null} onClick={() => void onCreate()}>
+            <CardContent className="relative z-10">
+              <Button variant="gold" className="w-full font-bold shadow-sm" disabled={busy !== null} onClick={() => void onCreate()}>
                 {busy === 'create' ? 'Đang tạo…' : 'Tạo phòng'}
               </Button>
               {createError && (
@@ -182,12 +199,18 @@ export function LobbyPage() {
             </CardContent>
           </Card>
 
-          <Card className="flex flex-col justify-between">
+          <Card className="relative flex flex-col justify-between overflow-hidden border-gold/35 transition-all hover:border-gold/70 hover:shadow-md">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-3 -bottom-4 font-display text-7xl text-suit-red/8 select-none"
+            >
+              ♦
+            </span>
             <CardHeader>
               <div className="flex items-center gap-2.5">
                 <span
                   aria-hidden
-                  className="inline-flex size-9 items-center justify-center rounded-xl border border-gold/40 bg-cream text-base text-wood"
+                  className="inline-flex size-9 items-center justify-center rounded-xl border border-gold/45 bg-cream text-base text-suit-red shadow-2xs"
                 >
                   ♦
                 </span>
@@ -195,7 +218,7 @@ export function LobbyPage() {
               </div>
               <CardDescription>Nhập mã phòng 6 ký tự từ chủ phòng.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="relative z-10">
               <form className="grid gap-3" onSubmit={(e) => void onJoin(e)} noValidate>
                 <FormField
                   id="room-code"
@@ -208,7 +231,7 @@ export function LobbyPage() {
                   className="font-mono text-base font-bold tracking-[0.25em]"
                   error={joinError ?? undefined}
                 />
-                <Button type="submit" variant="outline" className="w-full" disabled={busy !== null}>
+                <Button type="submit" variant="outline" className="w-full border-gold/50 font-semibold" disabled={busy !== null}>
                   {busy === 'join' ? 'Đang vào…' : 'Vào phòng'}
                 </Button>
               </form>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type CSSProperties } from 'react'
 import { parseCards, sortCards, type CardCode } from '@engine'
 import { useSelectionStore } from '@/features/game/selectionStore'
 import { playSound } from '@/lib/sound'
@@ -25,26 +25,43 @@ export function Hand({ cards, disabled = false }: HandProps) {
   if (sorted.length === 0)
     return <p className="py-3 text-center text-sm font-medium text-gold-light/85">Hết bài</p>
 
+  const count = sorted.length
+  const mid = (count - 1) / 2
+
   return (
     <div
       role="group"
       aria-label={`Bài của bạn (${sorted.length} lá)`}
-      className="flex max-w-full items-end justify-center px-1 pb-1 pt-5"
+      className="flex max-w-full items-end justify-center px-1 pb-2 pt-5 sm:pt-6"
     >
       {sorted.map((card, i) => {
         const isSelected = selected.includes(card.code)
+        const norm = mid > 0 ? (i - mid) / mid : 0
+        const fanStyle = {
+          '--fan-rot': `${(norm * 5.5).toFixed(2)}deg`,
+          '--fan-y': `${Math.round(norm * norm * 10)}px`,
+        } as CSSProperties
+
         return (
-          <PlayingCard
+          <span
             key={card.code}
-            card={card}
-            selected={isSelected}
-            disabled={disabled}
-            onToggle={(c) => {
-              playSound('select')
-              toggle(c.code)
-            }}
-            className={cn(i === 0 ? undefined : '-ml-[1.35rem] sm:-ml-5')}
-          />
+            style={fanStyle}
+            className={cn(
+              'hand-fan-slot inline-flex transition-transform duration-200',
+              i > 0 && '-ml-[1.25rem] sm:-ml-5 lg:-ml-3.5',
+            )}
+          >
+            <PlayingCard
+              card={card}
+              selected={isSelected}
+              disabled={disabled}
+              className="[transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)]"
+              onToggle={(c) => {
+                playSound('select')
+                toggle(c.code)
+              }}
+            />
+          </span>
         )
       })}
     </div>

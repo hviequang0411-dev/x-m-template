@@ -189,7 +189,7 @@ export function ProfilePage() {
               error={message && !message.ok ? message.text : undefined}
             />
             <div className="flex items-center gap-3">
-              <Button type="submit" disabled={saving || name.trim() === profile.display_name}>
+              <Button type="submit" variant="gold" disabled={saving || name.trim() === profile.display_name} className="font-bold">
                 {saving ? 'Đang lưu…' : 'Lưu'}
               </Button>
               {message?.ok && (

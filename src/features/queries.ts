@@ -15,7 +15,7 @@ export const ROOM_SELECT =
 export const MATCH_SELECT =
   'id, room_id, turn_deadline, ranked, room:game_rooms!matches_room_id_fkey(host_id), version, status, current_seat, lead_seat, ' +
   'current_trick, passed_seats, winner_seat, ' +
-  'players:match_players(seat, user_id, card_count, has_played, status, profile:profiles(display_name, is_bot, avatar_id))'
+  'players:match_players(seat, user_id, card_count, has_played, status, profile:profiles(display_name, is_bot, avatar_id, total_score))'
 
 export const HAND_SELECT = 'hand'
 
