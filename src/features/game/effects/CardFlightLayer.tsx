@@ -19,13 +19,21 @@ const FALLBACK_ME: Vec2 = { x: 0, y: 210 }
 const FALLBACK_TOP: Vec2 = { x: 0, y: -195 }
 const FALLBACK_LEFT: Vec2 = { x: -240, y: -85 }
 const FALLBACK_RIGHT: Vec2 = { x: 240, y: -85 }
+const FALLBACK_TOP_LEFT: Vec2 = { x: -115, y: -185 }
+const FALLBACK_TOP_RIGHT: Vec2 = { x: 115, y: -185 }
 
 function fallbackForSeat(key: string, idx: number, total: number): Vec2 {
   if (key === 'me') return FALLBACK_ME
   if (total <= 1) return FALLBACK_TOP
   if (total === 2) return idx === 0 ? FALLBACK_RIGHT : FALLBACK_LEFT
+  if (total === 3) {
+    if (idx === 0) return FALLBACK_RIGHT
+    if (idx === 1) return FALLBACK_TOP
+    return FALLBACK_LEFT
+  }
   if (idx === 0) return FALLBACK_RIGHT
-  if (idx === 1) return FALLBACK_TOP
+  if (idx === 1) return FALLBACK_TOP_RIGHT
+  if (idx === 2) return FALLBACK_TOP_LEFT
   return FALLBACK_LEFT
 }
 

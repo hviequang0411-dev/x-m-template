@@ -29,7 +29,7 @@ describe('handler', () => {
       throw new ApiError('ROOM_FULL')
     })(post('{}'))
     expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ ok: false, error: { code: 'ROOM_FULL', message: 'Phòng đã đủ 4 người' } })
+    expect(await res.json()).toEqual({ ok: false, error: { code: 'ROOM_FULL', message: 'Phòng đã đủ 5 người' } })
   })
 
   it('hides unexpected errors behind INTERNAL_ERROR', async () => {

@@ -44,13 +44,13 @@ export interface GameRuleSetV1 extends RuleSetCommon {
 }
 
 /**
- * v2 (approved 2026-11-17): 2–4 players [R01b]; a player needs 10 points to play a ranked match and
+ * v2 (approved 2026-11-17): 2–5 players [R01b]; a player needs 10 points to play a ranked match and
  * never loses more than their balance [R34, R35]; matches with a bot are unranked [R36].
  */
 export interface GameRuleSetV2 extends RuleSetCommon {
   readonly version: 2
   readonly minPlayers: 2
-  readonly maxPlayers: 4
+  readonly maxPlayers: 5
   readonly scoring: {
     readonly perCard: 1
     readonly congPenalty: 15
@@ -100,7 +100,7 @@ export const XAM_BASELINE_V2: GameRuleSetV2 = deepFreeze({
   code: 'xam-baseline',
   version: 2,
   minPlayers: 2,
-  maxPlayers: 4,
+  maxPlayers: 5,
   handSize: 10,
   direction: 'CCW',
   suitsMatter: false,

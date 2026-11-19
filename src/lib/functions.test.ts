@@ -18,10 +18,10 @@ describe('callFunction', () => {
   })
 
   it('throws ApiCallError with the server code and message', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse(409, { ok: false, error: { code: 'ROOM_FULL', message: 'Phòng đã đủ 4 người' } }))
+    const fetchMock = vi.fn(async () => jsonResponse(409, { ok: false, error: { code: 'ROOM_FULL', message: 'Phòng đã đủ 5 người' } }))
     const err = await callFunction('join-room', { code: 'ABCDEF' }, fetchMock).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ApiCallError)
-    expect(err).toMatchObject({ code: 'ROOM_FULL', message: 'Phòng đã đủ 4 người' })
+    expect(err).toMatchObject({ code: 'ROOM_FULL', message: 'Phòng đã đủ 5 người' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 

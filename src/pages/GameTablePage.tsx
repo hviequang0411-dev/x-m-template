@@ -20,6 +20,7 @@ import { CardFlightLayer } from '@/features/game/effects/CardFlightLayer'
 import { ChopBurst } from '@/features/game/effects/ChopBurst'
 import { SeatBadge } from '@/features/game/components/SeatBadge'
 import { ResultsModal } from '@/features/game/components/ResultsModal'
+import { RoomScoreboard, type ScoreboardEntry } from '@/features/game/components/RoomScoreboard'
 import {
   abortMatch,
   claimTimeout,
@@ -86,9 +87,15 @@ function seatVectorOffset(
   const total = order.length
   if (total <= 1 || idx === -1) return { x: '0px', y: '-110px' }
   if (total === 2) return idx === 0 ? { x: '135px', y: '-80px' } : { x: '-135px', y: '-80px' }
-  if (idx === 0) return { x: '175px', y: '-35px' }
-  if (idx === 1) return { x: '0px', y: '-115px' }
-  return { x: '-175px', y: '-35px' }
+  if (total === 3) {
+    if (idx === 0) return { x: '175px', y: '-35px' }
+    if (idx === 1) return { x: '0px', y: '-115px' }
+    return { x: '-175px', y: '-35px' }
+  }
+  if (idx === 0) return { x: '205px', y: '-55px' }
+  if (idx === 1) return { x: '85px', y: '-115px' }
+  if (idx === 2) return { x: '-85px', y: '-115px' }
+  return { x: '-205px', y: '-55px' }
 }
 
 function MiniCardChips({ cards }: { cards: readonly CardCode[] }) {
@@ -509,18 +516,45 @@ export function GameTablePage() {
       if (idx === 2) return 'col-start-1 row-start-1 w-full lg:max-w-[15rem] lg:justify-self-start lg:translate-y-24 lg:z-20'
       return 'col-start-3 row-start-1 w-full lg:max-w-[15rem] lg:justify-self-end lg:translate-y-24 lg:z-20'
     }
+    if (total === 4) {
+      // 5-player table (4 opponents): CCW arch Left (idx 3) · Top-Left (idx 2) · Top-Right (idx 1) · Right (idx 0)
+      if (idx === 3) return 'col-start-1 row-start-1 w-full sm:col-start-1 sm:row-start-1 lg:translate-y-10 lg:z-20'
+      if (idx === 2) return 'col-start-1 row-start-2 w-full sm:col-start-2 sm:row-start-1'
+      if (idx === 1) return 'col-start-2 row-start-2 w-full sm:col-start-3 sm:row-start-1'
+      return 'col-start-2 row-start-1 w-full sm:col-start-4 sm:row-start-1 lg:translate-y-10 lg:z-20'
+    }
     return 'w-full'
   }
 
   const actionsDisabled = pending || deal.dealing
+  const resultDeltaByUser = new Map<string, { delta: number; wins: number }>()
+  if (results && results.length > 0 && match.status === 'FINISHED') {
+    for (const r of results) resultDeltaByUser.set(r.userId, { delta: r.scoreDelta, wins: r.isWinner ? 1 : 0 })
+  }
+  const scoreboardEntries: ScoreboardEntry[] = match.seats.map((s) => {
+    const isMe = s.userId === userId
+    const pts = !s.isBot ? (typeof s.points === 'number' ? s.points : isMe ? profilePoints : undefined) : undefined
+    const fallback = resultDeltaByUser.get(s.userId)
+    return {
+      userId: s.userId,
+      seat: s.seat,
+      displayName: s.displayName,
+      isBot: s.isBot,
+      avatarId: s.avatarId,
+      points: pts,
+      roomDelta: s.roomDelta ?? fallback?.delta ?? 0,
+      roomWins: s.roomWins ?? fallback?.wins ?? 0,
+      cardCount: s.cardCount,
+    }
+  })
 
   return (
-    <div className="grid min-w-0 gap-3">
-      {/* Grand Luxury Royal Casino Oval Table */}
+    <div className="grid min-w-0 gap-2.5">
+      {/* Full-Size Grand Luxury Royal Casino Oval Table */}
       <div
         ref={tableRef}
         className={cn(
-          'casino-table-surface relative flex min-h-[34rem] flex-col justify-between gap-2.5 overflow-hidden rounded-[2rem] border-[6px] border-wood-rim p-3 ring-2 ring-gold/55 sm:min-h-[38rem] sm:gap-4 sm:rounded-[3.5rem] sm:border-[8px] sm:p-5 lg:min-h-[calc(100vh-5.75rem)] lg:rounded-[5.25rem] lg:border-[10px] lg:p-6',
+          'casino-table-surface relative flex min-h-[calc(100vh-4.75rem)] w-full flex-col justify-between gap-2.5 overflow-hidden rounded-[2rem] border-[6px] border-wood-rim p-3 ring-2 ring-gold/55 sm:gap-4 sm:rounded-[3.5rem] sm:border-[8px] sm:p-5 lg:min-h-[calc(100vh-5rem)] lg:rounded-[5.25rem] lg:border-[10px] lg:p-6',
           chopBurst && 'animate-table-shake',
         )}
       >
@@ -657,8 +691,7 @@ export function GameTablePage() {
         <section
           aria-label="Bài trên bàn"
           className={cn(
-            'casino-felt-ring relative z-10 flex min-h-48 flex-1 flex-col items-center justify-center gap-2.5 rounded-[2rem] bg-felt-dark/35 px-3 py-4 sm:min-h-60 sm:rounded-[4rem] sm:px-6 lg:min-h-64 lg:rounded-[9999px]',
-            order.length >= 3 && 'lg:px-56',
+            'casino-felt-ring relative z-10 flex min-h-56 flex-1 flex-col items-center justify-center gap-2.5 rounded-[2rem] bg-felt-dark/35 px-3 py-4 sm:min-h-72 sm:rounded-[4rem] sm:px-56 lg:min-h-[18.5rem] lg:rounded-[9999px] lg:px-64',
           )}
         >
           {/* Ornate Center Casino Crest Watermark */}
@@ -796,50 +829,61 @@ export function GameTablePage() {
             </p>
           )}
 
-          {/* Compact Left-Corner Frosted-Glass Match History */}
-          <aside
-            aria-label="Diễn biến ván"
-            className="casino-glass-panel z-20 flex max-h-20 w-full max-w-xs flex-col rounded-xl border border-gold/25 p-2 text-[11px] text-ivory/85 shadow-md sm:absolute sm:bottom-3 sm:left-4 sm:max-h-28 sm:w-48"
-          >
-            <div className="mb-1 flex items-center justify-between border-b border-gold/15 pb-0.5">
-              <span className="font-display text-[10px] font-bold tracking-wider text-gold-light/90 uppercase">
-                📜 Diễn biến
-              </span>
-              <span className="rounded-full bg-white/10 px-1.5 text-[9px] font-semibold tabular-nums text-ivory/75">
-                #{match.version}
-              </span>
-            </div>
+          {/* In-Table Left History & Right Scoreboard HUD Panels */}
+          <div className="z-20 mt-1 grid w-full min-w-0 gap-2 sm:contents">
+            {/* Compact Left-Corner Frosted-Glass Match History */}
+            <aside
+              aria-label="Diễn biến ván"
+              className="casino-glass-panel z-20 flex max-h-24 w-full flex-col rounded-xl border border-gold/25 p-2 text-[11px] text-ivory/85 shadow-md sm:absolute sm:bottom-3 sm:left-4 sm:max-h-32 sm:w-48"
+            >
+              <div className="mb-1 flex items-center justify-between border-b border-gold/15 pb-0.5">
+                <span className="font-display text-[10px] font-bold tracking-wider text-gold-light/90 uppercase">
+                  📜 Diễn biến
+                </span>
+                <span className="rounded-full bg-white/10 px-1.5 text-[9px] font-semibold tabular-nums text-ivory/75">
+                  #{match.version}
+                </span>
+              </div>
 
-            {actionLog.length === 0 ? (
-              <p className="my-auto text-center text-[10px] text-ivory/50">Ván mới…</p>
-            ) : (
-              <ul className="grid gap-1 overflow-y-auto pr-0.5">
-                {actionLog.slice(0, 6).map((item) => {
-                  const seatName =
-                    item.seat !== null ? (match.seats[item.seat]?.displayName ?? `Ghế ${item.seat + 1}`) : 'Bàn'
-                  return (
-                    <li
-                      key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-1 rounded bg-white/5 px-1.5 py-0.5 leading-tight"
-                    >
-                      <span className="max-w-20 truncate font-semibold text-gold-light/95">{seatName}</span>
-                      {item.kind === 'PLAY' && item.cards ? (
-                        <MiniCardChips cards={item.cards} />
-                      ) : item.kind === 'PASS' ? (
-                        <span className="text-[10px] text-ivory/65">Bỏ lượt</span>
-                      ) : item.kind === 'DECLARE_SAM' ? (
-                        <span className="rounded bg-suit-red px-1 text-[10px] font-bold text-gold-light">🔥 Báo Xâm</span>
-                      ) : item.kind === 'ROUND_RESET' ? (
-                        <span className="text-[10px] text-emerald-300">✦ Vòng mới</span>
-                      ) : (
-                        <span className="text-[10px] text-ivory/60">Chia bài</span>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </aside>
+              {actionLog.length === 0 ? (
+                <p className="my-auto text-center text-[10px] text-ivory/50">Ván mới…</p>
+              ) : (
+                <ul className="grid gap-1 overflow-y-auto pr-0.5">
+                  {actionLog.slice(0, 6).map((item) => {
+                    const seatName =
+                      item.seat !== null ? (match.seats[item.seat]?.displayName ?? `Ghế ${item.seat + 1}`) : 'Bàn'
+                    return (
+                      <li
+                        key={item.id}
+                        className="flex flex-wrap items-center justify-between gap-1 rounded bg-white/5 px-1.5 py-0.5 leading-tight"
+                      >
+                        <span className="max-w-20 truncate font-semibold text-gold-light/95">{seatName}</span>
+                        {item.kind === 'PLAY' && item.cards ? (
+                          <MiniCardChips cards={item.cards} />
+                        ) : item.kind === 'PASS' ? (
+                          <span className="text-[10px] text-ivory/65">Bỏ lượt</span>
+                        ) : item.kind === 'DECLARE_SAM' ? (
+                          <span className="rounded bg-suit-red px-1 text-[10px] font-bold text-gold-light">🔥 Báo Xâm</span>
+                        ) : item.kind === 'ROUND_RESET' ? (
+                          <span className="text-[10px] text-emerald-300">✦ Vòng mới</span>
+                        ) : (
+                          <span className="text-[10px] text-ivory/60">Chia bài</span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </aside>
+
+            {/* Right-Corner In-Table Frosted-Glass Leaderboard (1–5) */}
+            <RoomScoreboard
+              entries={scoreboardEntries}
+              currentUserId={userId}
+              tone="dark"
+              className="z-20 w-full sm:absolute sm:right-4 sm:bottom-3 sm:max-h-[17.5rem] sm:w-56 sm:overflow-y-auto lg:w-64"
+            />
+          </div>
         </section>
 
         {/* My Seat & Hand Dock at the Bottom of the Table */}

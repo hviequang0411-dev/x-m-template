@@ -11,7 +11,7 @@ insert into public.game_rulesets (code, version, status, config) values (
     "code": "xam-baseline",
     "version": 2,
     "minPlayers": 2,
-    "maxPlayers": 4,
+    "maxPlayers": 5,
     "handSize": 10,
     "direction": "CCW",
     "suitsMatter": false,

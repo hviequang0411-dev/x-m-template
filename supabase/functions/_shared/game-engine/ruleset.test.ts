@@ -79,8 +79,8 @@ describe('ruleset', () => {
     expect(resolveRuleset(seededConfig(migrationV2Sql))).toBe(XAM_BASELINE_V2)
   })
 
-  it('v2 allows 2–4 players and caps losses; new rooms use v2; v1 stays 4 players', () => {
-    expect(playerRange(XAM_BASELINE_V2)).toEqual({ min: 2, max: 4 })
+  it('v2 allows 2–5 players and caps losses; new rooms use v2; v1 stays 4 players', () => {
+    expect(playerRange(XAM_BASELINE_V2)).toEqual({ min: 2, max: 5 })
     expect(playerRange(XAM_BASELINE_V1)).toEqual({ min: 4, max: 4 })
     expect(XAM_BASELINE_V2.scoring).toMatchObject({ perCard: 1, congPenalty: 15, minBalanceToPlay: 10, capLossAtBalance: true })
     expect(XAM_BASELINE_V2.botMatchesRanked).toBe(false)

@@ -54,8 +54,8 @@ describe('chooseBotMove', () => {
     expect(chooseBotMove(s, R)).toEqual({ type: 'PASS', seat: 0 })
   })
 
-  it('all-bot games with 2, 3 and 4 seats always finish with only legal moves', { timeout: 60_000 }, () => {
-    for (const players of [2, 3, 4]) {
+  it('all-bot games with 2, 3, 4 and 5 seats always finish with only legal moves', { timeout: 60_000 }, () => {
+    for (const players of [2, 3, 4, 5]) {
       for (let seed = 1; seed <= 40; seed++) {
         const rng = seededRandomInt(seed * 10 + players)
         const deal = shuffleAndDeal({ players, handSize: R.handSize }, rng)

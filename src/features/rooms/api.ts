@@ -1,5 +1,6 @@
 import { callFunction } from '@/lib/functions'
 import { supabase } from '@/lib/supabase'
+import { fetchRoomScoreStats } from '@/features/match/api'
 import { ACTIVE_ROOM_SELECT, ROOM_SELECT } from '@/features/queries'
 
 export type RoomStatus = 'WAITING' | 'PLAYING' | 'CLOSED'
@@ -38,6 +39,8 @@ export interface RoomPlayer {
   isBot: boolean
   points: number
   avatarId?: string | null
+  roomDelta?: number
+  roomWins?: number
 }
 
 export interface RoomView {
@@ -46,7 +49,7 @@ export interface RoomView {
   status: RoomStatus
   hostId: string
   currentMatchId: string | null
-  /** Seated players, by seat (2–4 play a match). */
+  /** Seated players, by seat (2–5 play a match). */
   players: RoomPlayer[]
   /** Waiting members, in join order: they get a free seat when the room is waiting [R37]. */
   waiting: RoomPlayer[]
@@ -77,6 +80,7 @@ export async function fetchRoom(roomId: string): Promise<RoomView | null> {
     .maybeSingle<RoomRow>()
   if (error) throw new Error('ROOM_LOAD_FAILED')
   if (!data) return null
+  const roomStats = await fetchRoomScoreStats(data.id)
   const active = data.players.filter((p) => p.status === 'ACTIVE')
   const toPlayer = (p: RoomRow['players'][number]): RoomPlayer => ({
     seat: p.seat,
@@ -85,6 +89,8 @@ export async function fetchRoom(roomId: string): Promise<RoomView | null> {
     isBot: p.profile?.is_bot ?? false,
     points: p.profile?.total_score ?? 0,
     avatarId: p.profile?.avatar_id ?? null,
+    roomDelta: roomStats.get(p.user_id)?.delta ?? 0,
+    roomWins: roomStats.get(p.user_id)?.wins ?? 0,
   })
   return {
     id: data.id,

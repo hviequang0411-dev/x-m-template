@@ -182,10 +182,12 @@ export function AppLayout() {
 
       <main
         className={cn(
-          'mx-auto px-2.5 sm:px-4',
+          'mx-auto',
           pathname.startsWith('/match/')
-            ? 'max-w-[1380px] py-2.5 sm:py-4'
-            : 'max-w-5xl py-5 sm:py-8',
+            ? 'w-full max-w-none px-1.5 py-1.5 sm:px-3 sm:py-2.5'
+            : pathname.startsWith('/room/')
+              ? 'max-w-6xl px-2.5 py-5 sm:px-4 sm:py-7'
+              : 'max-w-5xl px-2.5 py-5 sm:px-4 sm:py-8',
         )}
       >
         <Outlet />

@@ -11,7 +11,7 @@ export const API_ERRORS = {
   METHOD_NOT_ALLOWED: { status: 405, message: 'Phương thức không được hỗ trợ' },
   // rooms
   ROOM_NOT_FOUND: { status: 404, message: 'Không tìm thấy phòng' },
-  ROOM_FULL: { status: 409, message: 'Phòng đã đủ 4 người' },
+  ROOM_FULL: { status: 409, message: 'Phòng đã đủ 5 người' },
   ALREADY_IN_ROOM: { status: 409, message: 'Bạn đang ở trong một phòng khác' },
   NOT_ROOM_MEMBER: { status: 403, message: 'Bạn không ở trong phòng này' },
   NOT_ROOM_HOST: { status: 403, message: 'Chỉ chủ phòng mới làm được việc này' },

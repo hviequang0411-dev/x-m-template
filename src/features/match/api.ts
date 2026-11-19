@@ -22,6 +22,55 @@ export interface SeatView {
   isBot: boolean
   avatarId?: string | null
   points?: number
+  roomDelta?: number
+  roomWins?: number
+}
+
+export interface RoomPlayerScoreStat {
+  delta: number
+  wins: number
+}
+
+/** Per-user net score delta and win count across completed matches in this room. */
+export async function fetchRoomScoreStats(roomId: string): Promise<Map<string, RoomPlayerScoreStat>> {
+  const stats = new Map<string, RoomPlayerScoreStat>()
+  try {
+    const [{ data: rankedRows }, { data: practiceMatches }] = await Promise.all([
+      supabase
+        .from('match_results')
+        .select('user_id, is_winner, score_delta, match:matches!inner(room_id)')
+        .eq('match.room_id', roomId),
+      supabase
+        .from('matches')
+        .select('winner_seat, players:match_players(seat, user_id)')
+        .eq('room_id', roomId)
+        .eq('status', 'FINISHED')
+        .eq('ranked', false),
+    ])
+
+    for (const row of (rankedRows ?? []) as { user_id?: string; is_winner?: boolean; score_delta?: number }[]) {
+      if (!row.user_id) continue
+      const cur = stats.get(row.user_id) ?? { delta: 0, wins: 0 }
+      cur.delta += typeof row.score_delta === 'number' ? row.score_delta : 0
+      if (row.is_winner) cur.wins += 1
+      stats.set(row.user_id, cur)
+    }
+
+    for (const m of (practiceMatches ?? []) as {
+      winner_seat: number | null
+      players?: { seat: number; user_id: string }[]
+    }[]) {
+      if (m.winner_seat === null || !Array.isArray(m.players)) continue
+      const winPlayer = m.players.find((p) => p.seat === m.winner_seat)
+      if (!winPlayer) continue
+      const cur = stats.get(winPlayer.user_id) ?? { delta: 0, wins: 0 }
+      cur.wins += 1
+      stats.set(winPlayer.user_id, cur)
+    }
+  } catch {
+    // Fallback cleanly if RLS restricts or test mocks omit score queries.
+  }
+  return stats
 }
 
 /** Public match state: the same shape as the `state` broadcast (plus display names). */
@@ -104,6 +153,7 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
   ])
   if (error) throw new Error('MATCH_LOAD_FAILED')
   if (!data) return null
+  const roomStats = await fetchRoomScoreStats(data.room_id)
   const unpacked = unpackTrick(data.current_trick)
   const actions: MatchActionView[] = (rawActions ?? []).map((row: Record<string, unknown>) => {
     const rawType = String(row.action_type ?? 'PLAY')
@@ -155,6 +205,8 @@ export async function fetchMatch(matchId: string): Promise<MatchView | null> {
         isBot: p.profile?.is_bot ?? false,
         avatarId: p.profile?.avatar_id ?? null,
         ...(typeof p.profile?.total_score === 'number' ? { points: p.profile.total_score } : {}),
+        roomDelta: roomStats.get(p.user_id)?.delta ?? 0,
+        roomWins: roomStats.get(p.user_id)?.wins ?? 0,
       })),
   }
 }

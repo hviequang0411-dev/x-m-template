@@ -126,7 +126,7 @@ describe('Lobby', () => {
     await user.type(input, 'abc234')
     expect(input).toHaveValue('ABC234')
     await user.click(screen.getByRole('button', { name: 'Vào phòng' }))
-    expect(await screen.findByText('Phòng đã đủ 4 người')).toBeInTheDocument()
+    expect(await screen.findByText('Phòng đã đủ 5 người')).toBeInTheDocument()
     expect(rooms.joinRoom).toHaveBeenCalledWith('ABC234')
   })
 })
@@ -141,11 +141,11 @@ describe('Waiting room', () => {
     expect(rooms.addBot).toHaveBeenCalledWith('r1')
   })
 
-  it('the host can start with 2–3 players; the 4th seat shows as free', async () => {
+  it('the host can start with 2–3 players; remaining seats show as free', async () => {
     rooms.fetchRoom.mockResolvedValue(room(3))
     renderAt('/room/r1')
     expect(await screen.findByRole('button', { name: 'Bắt đầu ván (3 người)' })).toBeEnabled()
-    expect(screen.getByText('Trống')).toBeInTheDocument()
+    expect(screen.getAllByText('Trống')).toHaveLength(2)
     expect(screen.getByText(/Ván tính điểm/)).toBeInTheDocument()
   })
 
@@ -571,6 +571,39 @@ describe('Game table v2', () => {
     const continueBtn = screen.getByRole('button', { name: 'Tiếp tục ván mới' })
     await user.click(continueBtn)
     expect(match.startMatch).toHaveBeenCalledWith('r1')
+  })
+
+  it('supports 5 players and ranks them 1..5 in the right-hand room scoreboard by net room points', async () => {
+    const fiveSeats = seats(5).map((s, idx) => ({
+      ...s,
+      points: 20 + idx * 5,
+      roomDelta: [5, 28, -12, 14, 0][idx],
+      roomWins: [1, 3, 0, 2, 0][idx],
+    }))
+    match.fetchMatch.mockResolvedValue(base({ seats: fiveSeats }))
+    renderAt('/match/m1')
+    const opponents = await screen.findByRole('list', { name: 'Đối thủ' })
+    expect(within(opponents).getAllByRole('listitem')).toHaveLength(4)
+    expect([...opponents.querySelectorAll('li p:first-child')].map((p) => p.textContent)).toEqual([
+      'Người 4',
+      'Người 3',
+      'Người 2',
+      'Người 1',
+    ])
+
+    const scoreboard = screen.getByRole('complementary', { name: 'Bảng điểm phòng' })
+    const rankItems = within(scoreboard).getAllByRole('listitem')
+    expect(rankItems).toHaveLength(5)
+    expect(rankItems[0]).toHaveTextContent('Người 1')
+    expect(rankItems[0]).toHaveTextContent('+28đ')
+    expect(rankItems[1]).toHaveTextContent('Người 3')
+    expect(rankItems[1]).toHaveTextContent('+14đ')
+    expect(rankItems[2]).toHaveTextContent('Người 0')
+    expect(rankItems[2]).toHaveTextContent('+5đ')
+    expect(rankItems[3]).toHaveTextContent('Người 4')
+    expect(rankItems[3]).toHaveTextContent('0đ')
+    expect(rankItems[4]).toHaveTextContent('Người 2')
+    expect(rankItems[4]).toHaveTextContent('-12đ')
   })
 })
 

@@ -185,7 +185,7 @@ export function LobbyPage() {
                 </span>
                 <CardTitle>Tạo phòng</CardTitle>
               </div>
-              <CardDescription>Tạo phòng riêng và mời 3 người bạn bằng mã phòng.</CardDescription>
+              <CardDescription>Tạo phòng riêng và mời tối đa 4 người bạn bằng mã phòng.</CardDescription>
             </CardHeader>
             <CardContent className="relative z-10">
               <Button variant="gold" className="w-full font-bold shadow-sm" disabled={busy !== null} onClick={() => void onCreate()}>

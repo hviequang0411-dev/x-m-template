@@ -6,6 +6,7 @@ import { ConnectionBadge } from '@/components/ConnectionBadge'
 import { Avatar } from '@/components/Avatar'
 import { ChatPanel, type ChatPerson } from '@/components/chat/ChatPanel'
 import { EmoteBubble } from '@/components/chat/EmoteBubble'
+import { RoomScoreboard } from '@/features/game/components/RoomScoreboard'
 import { useRoomChat } from '@/features/chat/useRoomChat'
 import { useAuthStore } from '@/features/auth/store'
 import { startMatch } from '@/features/match/api'
@@ -134,11 +135,21 @@ export function WaitingRoomPage() {
   const lowPoints = hasBot ? [] : room.players.filter((p) => p.points < MIN_POINTS)
   const iAmWaiting = room.waiting.some((p) => p.userId === userId)
   const canTriggerStart = isHost || (room.currentMatchId !== null && !iAmWaiting)
-  const seats = [0, 1, 2, 3].map((seat) => room.players.find((p) => p.seat === seat) ?? null)
+  const seats = [0, 1, 2, 3, 4].map((seat) => room.players.find((p) => p.seat === seat) ?? null)
   const isOnline = (p: RoomPlayer) => p.isBot || online.has(p.userId)
   const people: Record<string, ChatPerson> = Object.fromEntries(
     [...room.players, ...room.waiting].map((p) => [p.userId, { avatarId: p.avatarId, isBot: p.isBot }]),
   )
+  const scoreboardEntries = room.players.map((p, idx) => ({
+    userId: p.userId,
+    seat: p.seat ?? idx,
+    displayName: p.displayName,
+    isBot: p.isBot,
+    avatarId: p.avatarId,
+    points: p.points,
+    roomDelta: p.roomDelta ?? 0,
+    roomWins: p.roomWins ?? 0,
+  }))
 
   async function copyCode() {
     try {
@@ -152,77 +163,79 @@ export function WaitingRoomPage() {
   }
 
   return (
-    <div className="grid gap-6">
-      {/* Luxury Casino Ticket Header Card */}
-      <Card className="overflow-hidden border-gold/45 bg-gradient-to-br from-felt-dark via-felt to-felt-dark text-ivory shadow-lg">
-        <CardHeader className="pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-2xl text-gold-light">Phòng chờ</CardTitle>
-            <ConnectionBadge status={connection} />
-          </div>
-          <CardDescription className="text-ivory/80">
-            Gửi mã phòng cho bạn bè. Cần ít nhất 2 người chơi (có thể thêm máy); tối đa 4 người ngồi chơi, người vào
-            sau sẽ chờ ván tiếp theo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 border-t border-gold/20 bg-felt-deep/45 pt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2.5 rounded-xl border-2 border-dashed border-gold/70 bg-felt-deep/90 px-4 py-2 shadow-inner">
-              <span aria-hidden className="text-xs font-semibold tracking-wider text-gold-light/70 uppercase">
-                MÃ
-              </span>
-              <span
-                className="font-mono text-2xl font-extrabold tracking-[0.28em] text-gold-light sm:text-3xl"
-                aria-label={`Mã phòng ${room.code.split('').join(' ')}`}
-              >
-                {room.code}
-              </span>
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[1fr_17.5rem] lg:items-start">
+      <div className="grid min-w-0 gap-6">
+        {/* Luxury Casino Ticket Header Card */}
+        <Card className="overflow-hidden border-gold/45 bg-gradient-to-br from-felt-dark via-felt to-felt-dark text-ivory shadow-lg">
+          <CardHeader className="pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-2xl text-gold-light">Phòng chờ</CardTitle>
+              <ConnectionBadge status={connection} />
             </div>
-            <Button
-              variant="gold"
-              size="sm"
-              onClick={() => void copyCode()}
-              className="h-9 px-3.5 font-bold"
-            >
-              {copied ? 'Đã chép' : 'Chép mã'}
-            </Button>
+            <CardDescription className="text-ivory/80">
+              Gửi mã phòng cho bạn bè. Cần ít nhất 2 người chơi (có thể thêm máy); tối đa 5 người ngồi chơi, người vào
+              sau sẽ chờ ván tiếp theo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 border-t border-gold/20 bg-felt-deep/45 pt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center gap-2.5 rounded-xl border-2 border-dashed border-gold/70 bg-felt-deep/90 px-4 py-2 shadow-inner">
+                <span aria-hidden className="text-xs font-semibold tracking-wider text-gold-light/70 uppercase">
+                  MÃ
+                </span>
+                <span
+                  className="font-mono text-2xl font-extrabold tracking-[0.28em] text-gold-light sm:text-3xl"
+                  aria-label={`Mã phòng ${room.code.split('').join(' ')}`}
+                >
+                  {room.code}
+                </span>
+              </div>
+              <Button
+                variant="gold"
+                size="sm"
+                onClick={() => void copyCode()}
+                className="h-9 px-3.5 font-bold"
+              >
+                {copied ? 'Đã chép' : 'Chép mã'}
+              </Button>
+            </div>
+
+            <span className="rounded-full border border-gold/30 bg-white/10 px-3 py-1 text-xs font-medium text-gold-light">
+              {count}/5 ghế đã có người
+            </span>
+          </CardContent>
+        </Card>
+
+        {/* 5 Casino Seats Around Mini Oval Felt Table */}
+        <div className="casino-table-surface relative overflow-hidden rounded-[2rem] border-[5px] border-wood-rim p-3.5 ring-2 ring-gold/50 sm:rounded-[3rem] sm:p-6">
+          {/* Decorative Mini Oval Felt Ring Centerpiece (visible sm+) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-12 inset-y-8 hidden items-center justify-center rounded-full border border-gold/25 bg-felt-dark/30 sm:flex"
+          >
+            <span className="font-display text-xs tracking-[0.28em] text-gold-light/25 uppercase">
+              ♠ Xâm Online · Bàn 5 Chỗ ♠
+            </span>
           </div>
 
-          <span className="rounded-full border border-gold/30 bg-white/10 px-3 py-1 text-xs font-medium text-gold-light">
-            {count}/4 ghế đã có người
-          </span>
-        </CardContent>
-      </Card>
-
-      {/* 4 Casino Seats Around Mini Oval Felt Table */}
-      <div className="casino-table-surface relative overflow-hidden rounded-[2rem] border-[5px] border-wood-rim p-3.5 ring-2 ring-gold/50 sm:rounded-[3rem] sm:p-6">
-        {/* Decorative Mini Oval Felt Ring Centerpiece (visible sm+) */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-12 inset-y-8 hidden items-center justify-center rounded-full border border-gold/25 bg-felt-dark/30 sm:flex"
-        >
-          <span className="font-display text-xs tracking-[0.28em] text-gold-light/25 uppercase">
-            ♠ Xâm Online · Bàn 4 Chỗ ♠
-          </span>
-        </div>
-
-        <ol className="relative z-10 grid gap-3 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6" aria-label="Chỗ ngồi">
-          {seats.map((p, seat) => {
-            const seatIsHost = p?.userId === room.hostId
-            const seatIsMe = p?.userId === userId
-            const seatLow = p && !p.isBot && p.points < MIN_POINTS && !hasBot
-            return (
-              <li
-                key={seat}
-                className={cn(
-                  'relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 shadow-md transition-all sm:p-4',
-                  p
-                    ? seatIsMe
-                      ? 'border-gold-light bg-ivory/95 ring-2 ring-gold/50'
-                      : 'border-gold/35 bg-ivory/95'
-                    : 'border-dashed border-gold/35 bg-black/30 text-ivory/75 backdrop-blur-xs',
-                )}
-              >
+          <ol className="relative z-10 grid gap-3 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-5" aria-label="Chỗ ngồi">
+            {seats.map((p, seat) => {
+              const seatIsHost = p?.userId === room.hostId
+              const seatIsMe = p?.userId === userId
+              const seatLow = p && !p.isBot && p.points < MIN_POINTS && !hasBot
+              return (
+                <li
+                  key={seat}
+                  className={cn(
+                    'relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 shadow-md transition-all sm:p-4',
+                    seat === 4 && 'sm:col-span-2 sm:mx-auto sm:w-full sm:max-w-md',
+                    p
+                      ? seatIsMe
+                        ? 'border-gold-light bg-ivory/95 ring-2 ring-gold/50'
+                        : 'border-gold/35 bg-ivory/95'
+                      : 'border-dashed border-gold/35 bg-black/30 text-ivory/75 backdrop-blur-xs',
+                  )}
+                >
                 <div className="flex min-w-0 items-center gap-3">
                   {/* Seat Avatar */}
                   <div aria-hidden className="relative shrink-0">
@@ -395,7 +408,7 @@ export function WaitingRoomPage() {
             >
               {busy === 'start' ? 'Đang chia bài…' : canStart ? `Bắt đầu ván (${count} người)` : 'Cần ít nhất 2 người'}
             </Button>
-            {isHost && count < 4 && (
+            {isHost && count < 5 && (
               <Button variant="outline" disabled={busy !== null} onClick={() => void run('addBot')}>
                 {busy === 'bot' ? 'Đang thêm…' : 'Thêm máy'}
               </Button>
@@ -407,7 +420,7 @@ export function WaitingRoomPage() {
               ? 'Bạn đang trong hàng chờ, sẽ được vào ghế khi có chỗ trống.'
               : canStart
                 ? 'Đang chờ chủ phòng bắt đầu…'
-                : `Đang chờ thêm người (${count}/4)`}
+                : `Đang chờ thêm người (${count}/5)`}
           </p>
         )}
         <Button variant="outline" disabled={busy !== null} onClick={() => void run('leave')}>
@@ -436,6 +449,10 @@ export function WaitingRoomPage() {
         onSendText={chat.sendText}
         onSendEmote={(code) => void chat.sendEmote(code)}
       />
+      </div>
+
+      {/* Right-hand Room Leaderboard (Top 1–5) */}
+      <RoomScoreboard entries={scoreboardEntries} currentUserId={userId} tone="light" className="lg:sticky lg:top-4" />
     </div>
   )
 }
