@@ -21,6 +21,7 @@ import { ChopBurst } from '@/features/game/effects/ChopBurst'
 import { SeatBadge } from '@/features/game/components/SeatBadge'
 import { ResultsModal } from '@/features/game/components/ResultsModal'
 import { RoomScoreboard, type ScoreboardEntry } from '@/features/game/components/RoomScoreboard'
+import { RotateDeviceHint } from '@/features/game/components/RotateDeviceHint'
 import {
   abortMatch,
   claimTimeout,
@@ -37,6 +38,7 @@ import {
   type SeatView,
 } from '@/features/match/api'
 import { ApiCallError } from '@/lib/functions'
+import { enterLandscapeFullscreen } from '@/lib/fullscreen'
 import { useTopic } from '@/lib/realtime'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
@@ -136,6 +138,9 @@ export function GameTablePage() {
   const [chatOpen, setChatOpen] = useState(false)
   const [emotesOpen, setEmotesOpen] = useState(false)
   const [seenChatId, setSeenChatId] = useState(0)
+  const [scoresOpen, setScoresOpen] = useState(false)
+  const [fullscreenSupported] = useState(() => typeof document !== 'undefined' && Boolean(document.fullscreenEnabled))
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [chopBurst, setChopBurst] = useState(false)
   const [sweptTrick, setSweptTrick] = useState<{ cards: readonly CardCode[]; toX: string; toY: string; key: number } | null>(
     null,
@@ -149,6 +154,12 @@ export function GameTablePage() {
   const targetRefs = useRef<Map<string, HTMLElement | null>>(new Map())
   const chopTimerRef = useRef<number | null>(null)
   const sweepTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
 
   const refreshProfile = useProfileStore((s) => s.refresh)
   const profilePoints = useProfileStore((s) => s.profile?.total_score)
@@ -492,6 +503,7 @@ export function GameTablePage() {
   const unread = chatOpen ? 0 : chat.messages.filter((m) => m.id > Math.max(seenChatId, chat.historyUpToId) && m.userId !== userId).length
   function toggleChat() {
     setSeenChatId(lastChatId)
+    setScoresOpen(false)
     setChatOpen((o) => !o)
   }
   const chatPeople: Record<string, ChatPerson> = Object.fromEntries(
@@ -525,6 +537,9 @@ export function GameTablePage() {
     }
     return 'w-full'
   }
+  // Phones held sideways: one flat row of compact seats, no desktop "arch" offsets.
+  const landSeatClass = 'land:max-w-none land:translate-y-0 land:justify-self-stretch land:w-full'
+
 
   const actionsDisabled = pending || deal.dealing
   const resultDeltaByUser = new Map<string, { delta: number; wins: number }>()
@@ -555,14 +570,16 @@ export function GameTablePage() {
         ref={tableRef}
         className={cn(
           'casino-table-surface relative flex min-h-[calc(100vh-4.75rem)] w-full flex-col justify-between gap-2.5 overflow-hidden rounded-[2rem] border-[6px] border-wood-rim p-3 ring-2 ring-gold/55 sm:gap-4 sm:rounded-[3.5rem] sm:border-[8px] sm:p-5 lg:min-h-[calc(100vh-5rem)] lg:rounded-[5.25rem] lg:border-[10px] lg:p-6',
+          // Phone held sideways: exactly one screen tall, thin rim, tight spacing.
+          'land:h-[100dvh] land:min-h-0 land:gap-1 land:rounded-[1.75rem] land:border-4 land:px-4 land:py-1.5',
           chopBurst && 'animate-table-shake',
         )}
       >
         {/* Corner Filigree Ornaments */}
-        <span aria-hidden className="pointer-events-none absolute left-5 top-3 text-xs text-gold/35 select-none sm:text-sm">
+        <span aria-hidden className="pointer-events-none absolute left-5 top-3 text-xs text-gold/35 select-none sm:text-sm land:hidden">
           ❖
         </span>
-        <span aria-hidden className="pointer-events-none absolute right-5 top-3 text-xs text-gold/35 select-none sm:text-sm">
+        <span aria-hidden className="pointer-events-none absolute right-5 top-3 text-xs text-gold/35 select-none sm:text-sm land:hidden">
           ❖
         </span>
 
@@ -577,10 +594,10 @@ export function GameTablePage() {
         />
 
         {/* Integrated Frosted-Glass Table Top HUD Bar */}
-        <div className="z-20 flex flex-wrap items-center justify-between gap-2 rounded-full border border-gold/25 bg-black/45 px-3 py-1.5 backdrop-blur-md">
+        <div className="z-20 flex flex-wrap items-center justify-between gap-2 rounded-full border border-gold/25 bg-black/45 px-3 py-1.5 backdrop-blur-md land:flex-nowrap land:py-0.5 land:whitespace-nowrap">
           <div className="flex items-center gap-2">
             <ConnectionBadge status={connection} />
-            <span className="hidden rounded-full border border-gold/35 bg-white/8 px-2.5 py-0.5 text-xs font-semibold text-gold-light sm:inline-block">
+            <span className="hidden rounded-full border border-gold/35 bg-white/8 px-2.5 py-0.5 text-xs font-semibold text-gold-light sm:inline-block land:hidden">
               {match.ranked ? '♠ Bàn VIP Tính Điểm' : '✦ Bàn Luyện Tập'}
             </span>
           </div>
@@ -614,7 +631,7 @@ export function GameTablePage() {
               )}
             >
               <span aria-hidden>💬</span>
-              <span className="hidden sm:inline">Chat</span>
+              <span className="hidden sm:inline land:hidden">Chat</span>
               {unread > 0 && (
                 <span
                   aria-hidden
@@ -624,19 +641,63 @@ export function GameTablePage() {
                 </span>
               )}
             </button>
+            {/* Phone landscape only: the in-table scoreboard is folded into a pop-over */}
+            <button
+              type="button"
+              aria-expanded={scoresOpen}
+              aria-label="Bảng điểm"
+              onClick={() => {
+                setChatOpen(false)
+                setScoresOpen((o) => !o)
+              }}
+              className={cn(
+                'hidden cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none land:inline-flex',
+                scoresOpen
+                  ? 'border-gold bg-gold/20 text-gold-light'
+                  : 'border-white/15 bg-white/8 text-ivory/85 hover:border-gold/50 hover:text-gold-light',
+              )}
+            >
+              <span aria-hidden>🏆</span>
+            </button>
+            {fullscreenSupported && (
+              <button
+                type="button"
+                aria-pressed={isFullscreen}
+                aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+                title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+                onClick={() => {
+                  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+                  else void enterLandscapeFullscreen()
+                }}
+                className="hidden cursor-pointer items-center rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium text-ivory/85 transition-colors hover:border-gold/50 hover:text-gold-light focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none land:inline-flex"
+              >
+                <span aria-hidden>{isFullscreen ? '⤡' : '⤢'}</span>
+              </button>
+            )}
             <Link
               to={`/room/${match.roomId}`}
-              className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium text-ivory/85 transition-colors hover:border-gold/50 hover:text-gold-light"
+              className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-ivory/85 transition-colors hover:border-gold/50 hover:text-gold-light"
             >
               Phòng chờ
             </Link>
           </div>
         </div>
 
+        {scoresOpen && (
+          <div className="absolute top-10 right-4 z-40 hidden w-60 land:block">
+            <RoomScoreboard
+              entries={scoreboardEntries}
+              currentUserId={userId}
+              tone="dark"
+              className="max-h-[calc(100dvh-4rem)] overflow-y-auto bg-black/80 shadow-2xl"
+            />
+          </div>
+        )}
+
         {chatOpen && (
           <ChatPanel
             tone="dark"
-            className="absolute top-14 right-3 left-3 z-40 h-[25rem] max-h-[calc(100%-4.5rem)] shadow-2xl sm:left-auto sm:w-[22rem]"
+            className="absolute top-14 right-3 left-3 z-40 h-[25rem] max-h-[calc(100%-4.5rem)] shadow-2xl sm:left-auto sm:w-[22rem] land:top-10 land:max-h-[calc(100%-3rem)]"
             messages={chat.messages}
             meId={userId}
             people={chatPeople}
@@ -660,7 +721,7 @@ export function GameTablePage() {
         {/* Opponents seated around the oval table */}
         <ol
           className={cn(
-            'z-10 grid gap-1.5 sm:gap-3 lg:px-4',
+            'z-10 grid gap-1.5 sm:gap-3 lg:px-4 land:gap-2 land:px-6',
             order.length === 3
               ? 'grid-cols-3'
               : order.length === 2
@@ -668,6 +729,7 @@ export function GameTablePage() {
                 : order.length >= 4
                   ? 'grid-cols-2 sm:grid-cols-4'
                   : 'grid-cols-1',
+            order.length === 2 && 'land:mx-auto land:w-full land:max-w-xl',
           )}
           aria-label="Đối thủ"
         >
@@ -679,7 +741,7 @@ export function GameTablePage() {
               online={s.isBot || online.has(s.userId)}
               secondsLeft={match.currentSeat === s.seat && !finished ? secondsLeft : null}
               bubble={chat.bubbles[s.userId]}
-              className={seatPositionClass(idx, order.length)}
+              className={cn(seatPositionClass(idx, order.length), landSeatClass)}
               seatRef={(el) => {
                 targetRefs.current.set(`opp-${idx}`, el)
               }}
@@ -692,10 +754,11 @@ export function GameTablePage() {
           aria-label="Bài trên bàn"
           className={cn(
             'casino-felt-ring relative z-10 flex min-h-56 flex-1 flex-col items-center justify-center gap-2.5 rounded-[2rem] bg-felt-dark/35 px-3 py-4 sm:min-h-72 sm:rounded-[4rem] sm:px-56 lg:min-h-[18.5rem] lg:rounded-[9999px] lg:px-64',
+            'land:min-h-0 land:flex-row land:flex-wrap land:content-center land:gap-x-4 land:gap-y-1 land:overflow-hidden land:rounded-[9999px] land:px-6 land:py-1',
           )}
         >
           {/* Ornate Center Casino Crest Watermark */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none">
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center select-none land:hidden">
             <div className="flex flex-col items-center justify-center rounded-full border border-gold/14 px-8 py-5 sm:px-12 sm:py-7">
               <span className="font-display text-xs tracking-[0.35em] text-gold-light/18 uppercase sm:text-base">
                 ♠ Xâm Online ♠
@@ -740,7 +803,7 @@ export function GameTablePage() {
 
           {/* Center Played Trick or New Round Notice */}
           {match.currentTrick ? (
-            <div key={match.version} className="z-10 grid justify-items-center gap-2.5">
+            <div key={match.version} className="z-10 grid justify-items-center gap-2.5 land:flex land:items-center land:gap-3">
               <p className="rounded-full border border-gold/45 bg-black/50 px-3.5 py-1 text-xs font-semibold text-gold-light shadow-md backdrop-blur-md sm:text-sm">
                 {match.seats[match.leadSeat]?.displayName} · {COMBINATION_LABEL[match.currentTrick.type]}
               </p>
@@ -779,7 +842,7 @@ export function GameTablePage() {
 
           {/* Centered Frosted-Glass Turn / Combination / Thối 2 Warning / Error Pill */}
           {me && !finished && (
-            <div className="z-10 mt-0.5 flex flex-col items-center gap-1.5">
+            <div className="z-10 mt-0.5 flex flex-col items-center gap-1.5 land:mt-0 land:max-w-[15rem]">
               <p
                 className={cn(
                   'rounded-full border px-3.5 py-1 text-center text-xs font-semibold shadow-sm backdrop-blur-md transition-all sm:px-4 sm:text-sm',
@@ -830,7 +893,7 @@ export function GameTablePage() {
           )}
 
           {/* In-Table Left History & Right Scoreboard HUD Panels */}
-          <div className="z-20 mt-1 grid w-full min-w-0 gap-2 sm:contents">
+          <div className="z-20 mt-1 grid w-full min-w-0 gap-2 sm:contents land:hidden">
             {/* Compact Left-Corner Frosted-Glass Match History */}
             <aside
               aria-label="Diễn biến ván"
@@ -895,18 +958,20 @@ export function GameTablePage() {
             aria-label="Bài của bạn"
             className={cn(
               'casino-glass-panel relative z-10 grid gap-2 rounded-2xl border px-2 py-2.5 transition-all sm:gap-2.5 sm:p-4',
+              // Phone landscape: hand on the left, status + buttons stacked on the right.
+              'land:grid-cols-[minmax(0,1fr)_17rem] land:grid-rows-[auto_auto_1fr] land:gap-x-3 land:gap-y-1 land:px-3 land:py-1.5',
               myTurn ? 'animate-turn-seat border-gold-light bg-black/55' : 'border-white/15',
             )}
           >
             {/* My Seat Header Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm land:col-start-2 land:row-start-2 land:gap-1.5 land:px-0 land:text-xs">
+              <div className="flex flex-wrap items-center gap-2 land:gap-1.5">
                 <span className="relative">
                   <Avatar
                     avatarId={me.avatarId}
                     name={me.displayName}
                     className={cn(
-                      'size-9 text-xs font-extrabold shadow-inner ring-2',
+                      'size-9 text-xs font-extrabold shadow-inner ring-2 land:size-7',
                       myTurn ? 'ring-gold-shine' : 'ring-gold/45',
                     )}
                     fallbackClassName={myTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-gold-light'}
@@ -919,7 +984,7 @@ export function GameTablePage() {
                   {myTurn ? 'Đến lượt bạn' : `Chờ ${turnName}…`}
                 </span>
                 {typeof myPoints === 'number' && (
-                  <span className="casino-chip inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-wood-dark">
+                  <span className="casino-chip inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-wood-dark land:hidden">
                     <span aria-hidden className="text-[9px]">
                       ●
                     </span>
@@ -973,7 +1038,7 @@ export function GameTablePage() {
 
             {/* 30s turn progress bar */}
             {myTurn && secondsLeft !== null && (
-              <div className="mx-1 h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
+              <div className="mx-1 h-1.5 overflow-hidden rounded-full bg-white/12 land:col-span-2 land:row-start-1 land:h-1" aria-hidden>
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-300',
@@ -985,17 +1050,19 @@ export function GameTablePage() {
             )}
 
             {/* Player Hand (fanned on desktop, compact stack on mobile) */}
-            <Hand cards={hand} disabled={pending} />
+            <div className="min-w-0 land:col-start-1 land:row-span-2 land:row-start-2 land:self-center">
+              <Hand cards={hand} disabled={pending} />
+            </div>
 
             {/* Action Controls */}
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5 sm:justify-between sm:gap-2.5">
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5 sm:justify-between sm:gap-2.5 land:col-start-2 land:row-start-3 land:flex-nowrap land:content-end land:justify-start land:gap-1.5 land:pt-0">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 land:flex-nowrap land:justify-start land:gap-1.5">
                 <Button
                   variant="gold"
                   size="lg"
                   disabled={!myTurn || actionsDisabled || !hint}
                   onClick={() => void act('play')}
-                  className="h-11 min-w-32 px-7 text-base font-extrabold shadow-[0_6px_18px_rgba(212,160,23,0.4)]"
+                  className="h-11 min-w-32 px-7 text-base font-extrabold shadow-[0_6px_18px_rgba(212,160,23,0.4)] land:h-9 land:min-w-24 land:px-4"
                 >
                   Đánh
                 </Button>
@@ -1003,7 +1070,7 @@ export function GameTablePage() {
                   variant="outline"
                   disabled={!myTurn || actionsDisabled || leading}
                   onClick={() => void act('pass')}
-                  className="h-11 border-gold/45 bg-felt-dark/85 px-5 font-bold text-ivory hover:border-gold hover:bg-felt-dark"
+                  className="h-11 border-gold/45 bg-felt-dark/85 px-5 font-bold text-ivory hover:border-gold hover:bg-felt-dark land:h-9 land:px-3.5"
                 >
                   Bỏ lượt
                 </Button>
@@ -1013,7 +1080,7 @@ export function GameTablePage() {
                     disabled={actionsDisabled}
                     onClick={() => void act('sam')}
                     title="Báo Xâm: Xin đi trước và đánh hết bài không ai chặn được (nếu bị chặn sẽ xử thua)"
-                    className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-gold-bright bg-gradient-to-b from-ruby-fire to-suit-red-dark px-5 py-2 text-sm font-extrabold text-gold-shine shadow-(--shadow-fire-glow) transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                    className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-gold-bright land:h-9 land:px-3 bg-gradient-to-b from-ruby-fire to-suit-red-dark px-5 py-2 text-sm font-extrabold text-gold-shine shadow-(--shadow-fire-glow) transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
                   >
                     <span aria-hidden>🔥</span>
                     <span>Báo Xâm</span>
@@ -1041,7 +1108,7 @@ export function GameTablePage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-ivory/60 hover:bg-white/10 hover:text-ivory"
+                    className="text-ivory/60 hover:bg-white/10 hover:text-ivory land:h-9 land:px-2"
                     onClick={() => setConfirmAbort(true)}
                   >
                     Huỷ ván…
@@ -1066,6 +1133,12 @@ export function GameTablePage() {
           />
         )}
       </div>
+
+      {/* Phones held upright: ask to rotate (the table keeps running underneath) */}
+      <RotateDeviceHint
+        backTo={`/room/${match.roomId}`}
+        notice={myTurn && secondsLeft !== null ? `Đến lượt bạn · còn ${secondsLeft}s` : null}
+      />
     </div>
   )
 }

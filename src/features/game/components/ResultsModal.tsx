@@ -83,7 +83,7 @@ export function ResultsModal({
   return (
     <div
       className={cn(
-        'inset-0 z-30 flex items-center justify-center rounded-[1.75rem] p-3 backdrop-blur-md sm:absolute sm:p-6',
+        'inset-0 z-30 flex items-center justify-center rounded-[1.75rem] p-3 backdrop-blur-md sm:absolute sm:p-6 land:items-start land:overflow-y-auto land:p-2',
         isDefeatScreen
           ? 'bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.5)_0%,rgba(2,10,6,0.86)_100%)]'
           : 'bg-black/55',

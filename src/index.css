@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * Phone orientation variants.
+ * `phone-portrait`: a touch phone held upright (the table can't fit, so we ask to rotate).
+ * `land`: a phone held sideways (short viewport) — the table switches to a compact single-screen layout.
+ * Tablets/desktops (taller than 500px in landscape, or wider than 767px in portrait) are unaffected.
+ */
+@custom-variant phone-portrait (@media (orientation: portrait) and (max-width: 767px) and (pointer: coarse));
+@custom-variant land (@media (orientation: landscape) and (max-height: 500px));
+
 @theme {
   --font-sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: "Playfair Display", Georgia, Cambria, serif;
@@ -142,6 +151,22 @@ body {
 }
 
 /* Keyframe Animations (respects prefers-reduced-motion) */
+@keyframes rotate-device {
+  0%, 15% {
+    transform: rotate(0deg);
+  }
+  45%, 70% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-rotate-device {
+  animation: rotate-device 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
 @keyframes card-fly-in {
   0% {
     opacity: 0;
@@ -445,6 +470,7 @@ body {
     scroll-behavior: auto !important;
   }
 
+  .animate-rotate-device,
   .animate-deal-flight,
   .animate-deal-flight-me,
   .animate-card-play,

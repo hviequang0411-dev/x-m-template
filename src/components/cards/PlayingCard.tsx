@@ -18,7 +18,7 @@ function CourtSvg({ rank, red }: { rank: Card['rank']; red: boolean }) {
   const gold = '#d4a017'
   if (rank === 'J') {
     return (
-      <svg viewBox="0 0 36 36" className="size-7 sm:size-9" aria-hidden>
+      <svg viewBox="0 0 36 36" className="size-7 sm:size-9 land:size-6" aria-hidden>
         <circle cx="18" cy="18" r="16" fill="none" stroke={gold} strokeWidth="1.2" strokeOpacity="0.65" />
         {/* Knight / Jack helm & plume */}
         <path d="M12 24 C12 16, 24 16, 24 24 Z" fill={accent} fillOpacity="0.14" stroke={accent} strokeWidth="1.5" />
@@ -29,7 +29,7 @@ function CourtSvg({ rank, red }: { rank: Card['rank']; red: boolean }) {
   }
   if (rank === 'Q') {
     return (
-      <svg viewBox="0 0 36 36" className="size-7 sm:size-9" aria-hidden>
+      <svg viewBox="0 0 36 36" className="size-7 sm:size-9 land:size-6" aria-hidden>
         <circle cx="18" cy="18" r="16" fill="none" stroke={gold} strokeWidth="1.2" strokeOpacity="0.65" />
         {/* Queen tiara & gem */}
         <path
@@ -49,7 +49,7 @@ function CourtSvg({ rank, red }: { rank: Card['rank']; red: boolean }) {
   }
   if (rank === 'K') {
     return (
-      <svg viewBox="0 0 36 36" className="size-7 sm:size-9" aria-hidden>
+      <svg viewBox="0 0 36 36" className="size-7 sm:size-9 land:size-6" aria-hidden>
         <circle cx="18" cy="18" r="16" fill={gold} fillOpacity="0.1" stroke={gold} strokeWidth="1.4" />
         {/* King Royal Crown */}
         <path
@@ -97,7 +97,7 @@ export function PlayingCard({
 
       {/* Top-left corner index */}
       <span className="absolute left-1.5 top-1 flex flex-col items-center leading-none" aria-hidden>
-        <span className="text-[13px] font-extrabold tracking-tighter sm:text-base lg:text-[17px]">{rank}</span>
+        <span className="text-[13px] font-extrabold tracking-tighter sm:text-base lg:text-[17px] land:text-sm">{rank}</span>
         <span className="text-[11px] sm:text-xs">{suit}</span>
       </span>
 
@@ -112,18 +112,18 @@ export function PlayingCard({
       {/* Center pip / Royal Court artwork */}
       <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none" aria-hidden>
         {isCourt ? (
-          <span className="flex flex-col items-center gap-0.5 rounded-md border border-gold/25 bg-cream/65 px-1.5 py-1">
+          <span className="flex flex-col items-center gap-0.5 rounded-md border border-gold/25 bg-cream/65 px-1.5 py-1 land:px-1 land:py-0.5">
             <CourtSvg rank={card.rank} red={red} />
-            <span className="text-xs opacity-80 sm:text-sm">{suit}</span>
+            <span className="text-xs opacity-80 sm:text-sm land:text-xs">{suit}</span>
           </span>
         ) : isAce ? (
           <span className="flex flex-col items-center justify-center">
-            <span className="text-3xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.14)] sm:text-4xl lg:text-[2.65rem]">
+            <span className="text-3xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.14)] sm:text-4xl lg:text-[2.65rem] land:text-3xl">
               {suit}
             </span>
           </span>
         ) : (
-          <span className="text-2xl drop-shadow-[0_1px_1px_rgba(0,0,0,0.08)] sm:text-3xl lg:text-[2.15rem]">
+          <span className="text-2xl drop-shadow-[0_1px_1px_rgba(0,0,0,0.08)] sm:text-3xl lg:text-[2.15rem] land:text-2xl">
             {suit}
           </span>
         )}
@@ -141,7 +141,7 @@ export function PlayingCard({
   )
 
   const base = cn(
-    'playing-card-surface relative h-[4.5rem] w-[3rem] shrink-0 select-none rounded-lg border transition-all duration-200 ease-out sm:h-24 sm:w-[4.25rem] lg:h-[6.85rem] lg:w-[4.85rem]',
+    'playing-card-surface relative h-[4.5rem] w-[3rem] shrink-0 select-none rounded-lg border transition-all duration-200 ease-out sm:h-24 sm:w-[4.25rem] lg:h-[6.85rem] lg:w-[4.85rem] land:h-[4.6rem] land:w-[3.2rem]',
     red ? 'text-suit-red' : 'text-suit-black',
     selected ? 'playing-card-selected border-gold' : 'border-card-border',
     className,

@@ -32,7 +32,7 @@ export function Hand({ cards, disabled = false }: HandProps) {
     <div
       role="group"
       aria-label={`Bài của bạn (${sorted.length} lá)`}
-      className="flex max-w-full items-end justify-center px-1 pb-2 pt-5 sm:pt-6"
+      className="flex max-w-full items-end justify-center px-1 pb-2 pt-5 sm:pt-6 land:pt-4 land:pb-0.5"
     >
       {sorted.map((card, i) => {
         const isSelected = selected.includes(card.code)
@@ -48,7 +48,7 @@ export function Hand({ cards, disabled = false }: HandProps) {
             style={fanStyle}
             className={cn(
               'hand-fan-slot inline-flex transition-transform duration-200',
-              i > 0 && '-ml-[1.25rem] sm:-ml-5 lg:-ml-3.5',
+              i > 0 && '-ml-[1.25rem] sm:-ml-5 lg:-ml-3.5 land:-ml-6',
             )}
           >
             <PlayingCard

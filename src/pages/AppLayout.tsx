@@ -24,6 +24,8 @@ export function AppLayout() {
   const soundEnabled = useSoundStore((s) => s.enabled)
   const toggleSound = useSoundStore((s) => s.toggle)
   const [menuOpen, setMenuOpen] = useState(false)
+  // On a phone held sideways the table takes the whole screen; the app header would eat a third of it.
+  const onTable = pathname.startsWith('/match/')
 
   // Re-read the balance on every page change (it changes after matches and admin adjustments).
   useEffect(() => {
@@ -32,7 +34,7 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen overflow-x-clip">
-      <header className="border-b-2 border-gold/65 bg-gradient-to-r from-wood-rim via-felt-deep to-wood-rim text-ivory shadow-[0_6px_20px_rgba(4,27,16,0.35)]">
+      <header className={cn(onTable && 'land:hidden', 'border-b-2 border-gold/65 bg-gradient-to-r from-wood-rim via-felt-deep to-wood-rim text-ivory shadow-[0_6px_20px_rgba(4,27,16,0.35)]')}>
         <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-1.5 px-2.5 py-2 sm:gap-2 sm:px-4">
           {/* Left: Brand Logo & Desktop Navigation */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-5">
@@ -174,7 +176,10 @@ export function AppLayout() {
       {profile?.is_locked && (
         <p
           role="alert"
-          className="border-b border-suit-red/30 bg-red-50 px-4 py-2 text-center text-sm font-medium text-suit-red"
+          className={cn(
+            onTable && 'land:hidden',
+            'border-b border-suit-red/30 bg-red-50 px-4 py-2 text-center text-sm font-medium text-suit-red',
+          )}
         >
           Tài khoản của bạn đang bị khoá: bạn không thể tạo, vào phòng hoặc bắt đầu ván.
         </p>
@@ -183,8 +188,8 @@ export function AppLayout() {
       <main
         className={cn(
           'mx-auto',
-          pathname.startsWith('/match/')
-            ? 'w-full max-w-none px-1.5 py-1.5 sm:px-3 sm:py-2.5'
+          onTable
+            ? 'w-full max-w-none px-1.5 py-1.5 sm:px-3 sm:py-2.5 land:py-0 land:pr-[max(0.25rem,env(safe-area-inset-right))] land:pl-[max(0.25rem,env(safe-area-inset-left))]'
             : pathname.startsWith('/room/')
               ? 'max-w-6xl px-2.5 py-5 sm:px-4 sm:py-7'
               : 'max-w-5xl px-2.5 py-5 sm:px-4 sm:py-8',

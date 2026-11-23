@@ -33,7 +33,7 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
       ref={seatRef}
       aria-current={isTurn ? 'true' : undefined}
       className={cn(
-        'casino-glass-panel relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border p-2 text-center text-xs text-ivory shadow-md transition-all sm:flex-row sm:items-center sm:gap-2.5 sm:p-2.5 sm:text-left sm:text-sm',
+        'casino-glass-panel relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border p-2 text-center text-xs text-ivory shadow-md transition-all sm:flex-row sm:items-center sm:gap-2.5 sm:p-2.5 sm:text-left sm:text-sm land:gap-2 land:rounded-xl land:px-2 land:py-1 land:text-xs',
         isTurn
           ? 'animate-turn-seat border-gold-light bg-black/70'
           : isSam && playing
@@ -62,7 +62,7 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
 
       {/* Avatar with gold frame and 30s SVG countdown ring */}
       <div
-        className={cn('relative flex size-10 shrink-0 items-center justify-center sm:size-12', isUrgent && 'animate-urgent-ring')}
+        className={cn('relative flex size-10 shrink-0 items-center justify-center sm:size-12 land:size-9', isUrgent && 'animate-urgent-ring')}
         aria-hidden
       >
         {isTurn && secondsLeft !== null && (
@@ -87,7 +87,7 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
           userId={seat.userId}
           name={seat.displayName}
           className={cn(
-            'size-8 text-xs font-extrabold shadow-inner ring-2 sm:size-9',
+            'size-8 text-xs font-extrabold shadow-inner ring-2 sm:size-9 land:size-7',
             isUrgent ? 'ring-red-400' : isTurn ? 'ring-gold-shine' : 'ring-gold/45',
           )}
           fallbackClassName={isTurn ? 'bg-gold text-wood-dark' : 'bg-felt text-ivory'}
@@ -113,7 +113,7 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
         </p>
 
         {/* Points chip (humans) or Practice label (bots) */}
-        <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-start">
+        <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-start land:hidden">
           {seat.isBot ? (
             <span className="rounded-full border border-white/15 bg-white/10 px-1.5 py-0.2 text-[10px] font-medium text-ivory/75">
               Máy
@@ -129,8 +129,8 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
         </div>
 
         {/* Remaining cards stack + Báo 1 / Báo Xâm */}
-        <div className="mt-0.5 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
-          <span className="hidden sm:inline-flex">
+        <div className="mt-0.5 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start land:mt-0">
+          <span className="hidden sm:inline-flex land:hidden">
             <CardBackStack count={seat.cardCount} />
           </span>
           <p className="text-[11px] font-bold tabular-nums text-gold-light sm:text-xs">
@@ -148,7 +148,7 @@ export function SeatBadge({ seat, match, online, secondsLeft, bubble, className,
           </p>
         </div>
 
-        <p className="hidden max-w-full truncate text-[11px] text-ivory/70 sm:block">
+        <p className="hidden max-w-full truncate text-[11px] text-ivory/70 sm:block land:hidden">
           {[isTurn && 'Đang đánh', passed && 'Đã bỏ', !seat.hasPlayed && 'Chưa đánh'].filter(Boolean).join(' · ') || '\u00A0'}
         </p>
       </div>
